@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -13,15 +12,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (isAuthRoute) return <>{children}</>;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen overflow-hidden">
+      <Sidebar />
       <Topbar />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <Breadcrumbs />
-          <div className="p-6">{children}</div>
-        </main>
-      </div>
+      {/* Main canvas offset from fixed sidebar + topbar */}
+      <main className="ml-[240px] mt-[80px] w-[calc(100%-240px)] h-[calc(100vh-80px)] overflow-y-auto scroll-hidden p-grid_unit">
+        {children}
+      </main>
       <CommandPalette />
     </div>
   );
