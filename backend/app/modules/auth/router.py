@@ -1,11 +1,11 @@
-"""Auth module — HTTP router."""
+"""Auth module — HTTP router (Neon PostgreSQL source of truth)."""
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user
-from app.db.session import get_db
-from app.modules.auth.models import User
+from app.api.dependencies import get_current_identity
+from app.db.session import get_neon_db
 from app.modules.auth.schemas import (
+    CurrentUser,
     LoginRequest,
     MeResponse,
     RefreshRequest,
@@ -26,7 +26,7 @@ router = APIRouter()
 )
 async def register(
     body: RegisterRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_neon_db),
 ):
     service = AuthService(db)
     return await service.register(body)
@@ -39,7 +39,7 @@ async def register(
 )
 async def login(
     body: LoginRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_neon_db),
 ):
     service = AuthService(db)
     return await service.login(body)
@@ -52,7 +52,7 @@ async def login(
 )
 async def refresh(
     body: RefreshRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_neon_db),
 ):
     service = AuthService(db)
     return await service.refresh(body.refresh_token)
@@ -61,7 +61,21 @@ async def refresh(
 @router.get(
     "/me",
     response_model=MeResponse,
-    summary="Get current authenticated user",
+    summary="Get current authenticated user identity",
 )
-async def me(current_user: User = Depends(get_current_user)):
-    return MeResponse(data=UserResponse.model_validate(current_user))
+async def me(
+    identity: CurrentUser = Depends(get_current_identity),
+):
+    user_resp = UserResponse(
+        id=identity.user_id,
+        name=identity.name,
+        email=identity.email,
+        job_title=identity.job_title,
+        department=identity.department,
+        employee_id=identity.employee_id,
+        role=identity.role,
+        is_active=identity.is_active,
+        organization_id=identity.organization_id,
+        created_at=getattr(identity, "created_at", None) or getattr(identity, "updated_at", None) or "2026-08-19T00:00:00Z",
+    )
+    return MeResponse(data=user_resp)

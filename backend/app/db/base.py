@@ -17,6 +17,10 @@ class Base(DeclarativeBase):
     pass
 
 
+# Explicit alias for Neon PostgreSQL Identity Source of Truth
+IdentityBase = Base
+
+
 class TimestampMixin:
     """Adds created_at / updated_at columns to any model."""
 
@@ -34,12 +38,10 @@ class TimestampMixin:
 
 
 class UUIDMixin:
-    """Primary key as UUID string (SQLite-compatible)."""
+    """Primary key as UUID string (36 characters)."""
 
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
-
-

@@ -80,3 +80,53 @@ async def test_me_authenticated(client: AsyncClient):
 async def test_me_unauthenticated(client: AsyncClient):
     response = await client.get("/api/v1/auth/me")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_seed_login_and_role(client: AsyncClient):
+    """Seed admin can authenticate and receives ORG_ADMIN role."""
+    response = await client.post("/api/v1/auth/login", json={
+        "email": "admin@company.ai",
+        "password": "SecureAdmin1",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == "admin@company.ai"
+    assert data["user"]["role"] == "ORG_ADMIN"
+
+    # Verify /me endpoint returns ORG_ADMIN
+    me_resp = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {data['access_token']}"}
+    )
+    assert me_resp.status_code == 200
+    assert me_resp.json()["data"]["role"] == "ORG_ADMIN"
+
+
+@pytest.mark.asyncio
+async def test_employee_seed_login_and_role(client: AsyncClient):
+    """Seed employee can authenticate, receives EMPLOYEE role and organization_id."""
+    response = await client.post("/api/v1/auth/login", json={
+        "email": "employee@company.ai",
+        "password": "SecureEmployee1",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["email"] == "employee@company.ai"
+    assert data["user"]["role"] == "EMPLOYEE"
+    assert data["user"]["organization_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_unaffiliated_employee_login(client: AsyncClient):
+    """Unaffiliated employee authenticates but has organization_id == None."""
+    response = await client.post("/api/v1/auth/login", json={
+        "email": "unaffiliated@company.ai",
+        "password": "SecureUnaffiliated1",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["email"] == "unaffiliated@company.ai"
+    assert data["user"]["role"] == "EMPLOYEE"
+    assert data["user"]["organization_id"] is None

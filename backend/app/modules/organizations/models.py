@@ -1,10 +1,14 @@
 """Organizations module — SQLAlchemy models."""
 import enum
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.modules.auth.models import User
 
 
 class OrgStatus(str, enum.Enum):
@@ -28,6 +32,7 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     company_phone:   Mapped[str | None] = mapped_column(String(30),  nullable=True)
     industry:        Mapped[str | None] = mapped_column(String(100), nullable=True)
     company_size:    Mapped[str | None] = mapped_column(String(50),  nullable=True)
+    employee_count:  Mapped[int | None] = mapped_column(Integer,     nullable=True)
     website:         Mapped[str | None] = mapped_column(String(500), nullable=True)
     country:         Mapped[str | None] = mapped_column(String(100), nullable=True)
     city:            Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -45,6 +50,9 @@ class Organization(UUIDMixin, TimestampMixin, Base):
 
 class OrganizationMember(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "organization_members"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_org_member"),
+    )
 
     organization_id: Mapped[str] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
@@ -59,4 +67,7 @@ class OrganizationMember(UUIDMixin, TimestampMixin, Base):
 
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="members"
+    )
+    user: Mapped["User"] = relationship(
+        "User", lazy="select"
     )

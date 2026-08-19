@@ -1,0 +1,91 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL (Shared Multi-Tenant Database) ────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: twin_agent_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-twin_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-twin_agent_password}
+      POSTGRES_DB: ${POSTGRES_DB:-twin_agent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-twin_agent} -d ${POSTGRES_DB:-twin_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── FastAPI Backend (Shared for Both Portals) ────────────────
+  api:
+    build:
+      context: ./backend
+      target: production
+    container_name: twin_agent_api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Twin Agent Platform
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-twin_agent}:${POSTGRES_PASSWORD:-twin_agent_password}@postgres:5432/${POSTGRES_DB:-twin_agent}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev_secret_change_in_production}
+      - STORAGE_PROVIDER=local
+      - STORAGE_LOCAL_PATH=/app/uploads
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: twin_agent_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO (Object Storage) ──────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: twin_agent_minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    profiles:
+      - minio
+
+volumes:
+  postgres_data:
+  minio_data:

@@ -18,12 +18,14 @@ class UserRole(str, enum.Enum):
 class User(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "users"
 
-    name:          Mapped[str]  = mapped_column(String(255), nullable=False)
-    email:         Mapped[str]  = mapped_column(String(320), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str]  = mapped_column(String(255), nullable=False)
-    phone:         Mapped[str | None] = mapped_column(String(30), nullable=True)
-    job_title:     Mapped[str | None] = mapped_column(String(255), nullable=True)
-    role:          Mapped[UserRole]   = mapped_column(
+    name:          Mapped[str]         = mapped_column(String(255), nullable=False)
+    email:         Mapped[str]         = mapped_column(String(320), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str]         = mapped_column(String(255), nullable=False)
+    phone:         Mapped[str | None]  = mapped_column(String(30),  nullable=True)
+    employee_id:   Mapped[str | None]  = mapped_column(String(50),  nullable=True, index=True)
+    job_title:     Mapped[str | None]  = mapped_column(String(255), nullable=True)
+    department:    Mapped[str | None]  = mapped_column(String(100), nullable=True)
+    role:          Mapped[UserRole]    = mapped_column(
         Enum(UserRole), default=UserRole.DEMO_USER, nullable=False
     )
-    is_active:     Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active:     Mapped[bool]        = mapped_column(Boolean, default=True, nullable=False)

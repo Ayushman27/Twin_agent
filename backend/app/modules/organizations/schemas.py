@@ -13,6 +13,7 @@ class OrganizationCreate(BaseModel):
     company_phone:   Optional[str]      = Field(None, max_length=30)
     industry:        Optional[str]      = Field(None, max_length=100)
     company_size:    Optional[str]      = Field(None, max_length=50)
+    employee_count:  Optional[int]      = Field(None, ge=1)
     website:         Optional[str]      = Field(None, max_length=500)
     country:         Optional[str]      = Field(None, max_length=100)
     city:            Optional[str]      = Field(None, max_length=100)
@@ -27,6 +28,7 @@ class OrganizationUpdate(BaseModel):
     company_phone:   Optional[str]      = None
     industry:        Optional[str]      = None
     company_size:    Optional[str]      = None
+    employee_count:  Optional[int]      = Field(None, ge=1)
     website:         Optional[str]      = None
     country:         Optional[str]      = None
     city:            Optional[str]      = None
@@ -44,6 +46,7 @@ class OrganizationResponse(BaseModel):
     company_phone:   Optional[str]
     industry:        Optional[str]
     company_size:    Optional[str]
+    employee_count:  Optional[int] = None
     website:         Optional[str]
     country:         Optional[str]
     city:            Optional[str]

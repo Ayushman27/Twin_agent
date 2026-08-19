@@ -3,6 +3,7 @@ Centralized exception handling.
 All errors return a standard {success, error: {code, message, details}} envelope.
 """
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -41,6 +42,16 @@ class TwinAgentException(Exception):
         self.status_code = status_code
         self.details = details or {}
         super().__init__(message)
+
+
+class BadRequestException(TwinAgentException):
+    def __init__(self, message: str, details: dict = None):
+        super().__init__(
+            code="BAD_REQUEST",
+            message=message,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details=details,
+        )
 
 
 class NotFoundException(TwinAgentException):
@@ -111,7 +122,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return error_response(
             "VALIDATION_ERROR",
             "Request validation failed",
-            {"errors": exc.errors()},
+            {"errors": jsonable_encoder(exc.errors())},
             status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
 

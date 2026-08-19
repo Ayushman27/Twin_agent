@@ -1,9 +1,11 @@
-"""Demo Agent module — HTTP router."""
+"""Demo Agent module — HTTP router (SQLite Agent Subsystem + Neon Identity Bridge)."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, get_optional_user
-from app.db.session import get_db
+from app.api.dependencies import get_optional_user
+from app.db.session import get_agent_db
 from app.modules.auth.models import User
 from app.modules.demo_agent.schemas import (
     ChatRequest, ChatResponse, SessionCreateRequest,
@@ -22,8 +24,8 @@ router = APIRouter()
 )
 async def create_session(
     body: SessionCreateRequest,
-    current_user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_agent_db),
 ):
     service = DemoAgentService(db)
     session = await service.create_session(
@@ -40,8 +42,8 @@ async def create_session(
 )
 async def chat(
     body: ChatRequest,
-    current_user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_agent_db),
 ):
     service = DemoAgentService(db)
     return await service.chat(body.session_id, body.message, current_user)
@@ -54,8 +56,8 @@ async def chat(
 )
 async def get_session(
     session_id: str,
-    current_user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_agent_db),
 ):
     service = DemoAgentService(db)
     return await service.get_session(session_id, current_user)
@@ -68,8 +70,8 @@ async def get_session(
 )
 async def end_session(
     session_id: str,
-    current_user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_agent_db),
 ):
     service = DemoAgentService(db)
     await service.end_session(session_id, current_user)

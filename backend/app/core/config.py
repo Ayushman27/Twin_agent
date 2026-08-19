@@ -2,8 +2,9 @@
 Application configuration via Pydantic BaseSettings.
 All settings are read from environment variables / .env file.
 """
+import json
 from functools import lru_cache
-from typing import List
+from typing import List, Optional, Union
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,16 +23,42 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:3001"]
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_origins(cls, v):
         if isinstance(v, str):
-            return [o.strip() for o in v.split(",")]
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [o.strip() for o in v_str.split(",") if o.strip()]
         return v
 
-    # ── Database ─────────────────────────────────────────────
+    # ── Database 1: Neon PostgreSQL (Identity, Company, Employee, Auth) ──
+    NEON_DATABASE_URL: Optional[str] = None
+
+    @field_validator("NEON_DATABASE_URL", mode="before")
+    @classmethod
+    def format_neon_url(cls, v):
+        if isinstance(v, str) and v.strip():
+            url = v.strip()
+            if url.startswith("postgresql://"):
+                url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+            elif url.startswith("postgres://"):
+                url = "postgresql+asyncpg://" + url[len("postgres://"):]
+            if "sslmode=" in url:
+                url = url.replace("sslmode=require", "ssl=require").replace("sslmode=prefer", "ssl=prefer").replace("sslmode=allow", "ssl=allow")
+            return url
+        return v
+
+    # ── Database 2: SQLite (Agent subsystem, runs, sessions, transcripts) ─
+    AGENT_DATABASE_URL: str = "sqlite+aiosqlite:///./twin_agent.db"
+
+    # Default / backward compatibility fallback
     DATABASE_URL: str = "sqlite+aiosqlite:///./twin_agent.db"
 
     # ── JWT ──────────────────────────────────────────────────
@@ -55,7 +82,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 512
 
-    # ── Email ─────────────────────────────────────────────────
+    # ── Email (future) ───────────────────────────────────────────
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

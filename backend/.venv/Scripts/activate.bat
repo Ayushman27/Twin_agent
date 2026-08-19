@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\ayush\OneDrive\Desktop\created-projects\twin_agent_web\backend\.venv
+set VIRTUAL_ENV=D:\Twin_Agent1.0\backend\.venv
 
 if not defined PROMPT set PROMPT=$P$G
 

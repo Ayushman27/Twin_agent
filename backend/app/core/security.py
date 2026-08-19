@@ -10,15 +10,22 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 # ── Password hashing ──────────────────────────────────────────
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    pwd_bytes = plain.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    pwd_bytes = plain.encode("utf-8")[:72]
+    hash_bytes = hashed.encode("utf-8")
+    try:
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
 
 
 # ── JWT ───────────────────────────────────────────────────────
