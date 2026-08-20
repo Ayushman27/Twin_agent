@@ -9,6 +9,9 @@ from app.modules.documents.router import router as doc_router
 from app.modules.desktop.router import router as desktop_router
 from app.modules.demo_agent.router import router as demo_router
 from app.modules.health.router import api_health_router
+from app.api.agentic.groups import router as agent_groups_router
+from app.api.agentic.capabilities import router as agent_capabilities_router
+from app.api.agentic.executions import router as agent_executions_router
 
 api_router = APIRouter()
 
@@ -20,3 +23,8 @@ api_router.include_router(doc_router,        prefix="",               tags=["Doc
 api_router.include_router(desktop_router,    prefix="/desktop",       tags=["Desktop"])
 api_router.include_router(demo_router,       prefix="/demo-agent",    tags=["Demo Agent"])
 api_router.include_router(api_health_router, prefix="/health",        tags=["Health"])
+
+# Dynamic Agentic Layer Endpoints
+api_router.include_router(agent_groups_router,       prefix="", tags=["Agent Groups"])
+api_router.include_router(agent_capabilities_router, prefix="", tags=["Agent Capabilities"])
+api_router.include_router(agent_executions_router,   prefix="", tags=["Agent Executions"])
