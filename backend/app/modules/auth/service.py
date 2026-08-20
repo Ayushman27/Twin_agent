@@ -2,7 +2,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictException, UnauthorizedException
+from app.core.exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -10,10 +10,10 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.modules.auth.models import User
+from app.modules.auth.models import User, UserRole
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.modules.organizations.models import OrganizationMember
+from app.modules.organizations.models import MemberStatus, OrganizationMember
 
 
 class AuthService:
@@ -41,6 +41,21 @@ class AuthService:
             raise UnauthorizedException("Invalid email or password")
         if not user.is_active:
             raise UnauthorizedException("Account is disabled")
+
+        if user.role == UserRole.EMPLOYEE:
+            res_mem = await self.db.execute(
+                select(OrganizationMember).where(OrganizationMember.user_id == user.id)
+            )
+            mem = res_mem.scalars().first()
+            if mem and mem.status == MemberStatus.INVITED:
+                raise ForbiddenException(
+                    "Your account registration is currently pending administrator approval. Please wait for your organization to approve your request."
+                )
+            if mem and mem.status == MemberStatus.INACTIVE:
+                raise ForbiddenException(
+                    "Your employee account has been deactivated or rejected by your organization administrator."
+                )
+
         return await self._issue_tokens(user)
 
     async def refresh(self, refresh_token: str) -> TokenResponse:

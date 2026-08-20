@@ -105,13 +105,14 @@ class EmployeeRegisterRequest(BaseModel):
 
 
 class EmployeeRegisterResponse(BaseModel):
-    success:       bool = True
-    message:       str  = "Employee registered successfully."
-    access_token:  str
-    refresh_token: str
-    token_type:    str  = "bearer"
-    organization:  OrganizationResponse
-    user:          UserResponse
+    success:           bool = True
+    message:           str  = "Registration request submitted to organization for administrator approval."
+    requires_approval: bool = True
+    access_token:      Optional[str] = None
+    refresh_token:     Optional[str] = None
+    token_type:        str  = "bearer"
+    organization:      OrganizationResponse
+    user:              UserResponse
 
 
 # ── Public Discovery Schemas ─────────────────────────────────

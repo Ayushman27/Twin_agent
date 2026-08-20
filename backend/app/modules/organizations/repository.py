@@ -1,10 +1,11 @@
 """Organizations module — Repository."""
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.organizations.models import OrgStatus, Organization, OrganizationMember
+from app.modules.auth.models import User
+from app.modules.organizations.models import MemberStatus, OrgStatus, Organization, OrganizationMember
 
 
 class OrganizationRepository:
@@ -63,10 +64,17 @@ class OrganizationRepository:
         return org
 
     async def add_member(
-        self, org_id: str, user_id: str, role: str = "ORG_ADMIN"
+        self,
+        org_id: str,
+        user_id: str,
+        role: str = "ORG_ADMIN",
+        status: MemberStatus = MemberStatus.ACTIVE,
     ) -> OrganizationMember:
         member = OrganizationMember(
-            organization_id=org_id, user_id=user_id, role=role
+            organization_id=org_id,
+            user_id=user_id,
+            role=role,
+            status=status,
         )
         self.db.add(member)
         await self.db.flush()
@@ -79,6 +87,60 @@ class OrganizationRepository:
             )
         )
         return list(result.scalars().all())
+
+    async def get_member_by_id(self, member_id: str) -> Optional[OrganizationMember]:
+        result = await self.db.execute(
+            select(OrganizationMember).where(OrganizationMember.id == member_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_members_with_users(
+        self, org_id: str, status: Optional[MemberStatus] = None
+    ) -> List[Tuple[OrganizationMember, User]]:
+        query = (
+            select(OrganizationMember, User)
+            .join(User, OrganizationMember.user_id == User.id)
+            .where(OrganizationMember.organization_id == org_id)
+        )
+        if status:
+            query = query.where(OrganizationMember.status == status)
+        query = query.order_by(OrganizationMember.created_at.desc())
+        result = await self.db.execute(query)
+        return list(result.all())
+
+    async def count_members(self, org_id: str) -> int:
+        result = await self.db.execute(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == org_id
+            )
+        )
+        return result.scalar_one() or 0
+
+    async def count_pending_invitations(self, org_id: str) -> int:
+        result = await self.db.execute(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == org_id,
+                OrganizationMember.status == MemberStatus.INVITED,
+            )
+        )
+        return result.scalar_one() or 0
+
+    async def count_active_members(self, org_id: str) -> int:
+        result = await self.db.execute(
+            select(func.count(OrganizationMember.id)).where(
+                OrganizationMember.organization_id == org_id,
+                OrganizationMember.status == MemberStatus.ACTIVE,
+            )
+        )
+        return result.scalar_one() or 0
+
+    async def update_member_status(
+        self, member: OrganizationMember, status: MemberStatus
+    ) -> OrganizationMember:
+        member.status = status
+        await self.db.flush()
+        await self.db.refresh(member)
+        return member
 
     async def get_user_memberships(
         self, user_id: str

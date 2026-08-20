@@ -1,7 +1,7 @@
 """
 Comprehensive tests for Employee Registration connected to Neon PostgreSQL.
 Validates organization verification, forced EMPLOYEE role, multi-tenant membership,
-atomic transactions, post-registration login, and SQLite agent isolation.
+atomic transactions, approval workflow, post-approval login, and SQLite agent isolation.
 """
 import pytest
 from httpx import AsyncClient
@@ -15,7 +15,7 @@ from app.modules.organizations.models import MemberStatus, Organization, Organiz
 
 @pytest.mark.asyncio
 async def test_employee_registration_success(client: AsyncClient, db_session: AsyncSession):
-    """Test 1, 5, 6, 7, 8: Valid organization + valid employee registration creates User & OrganizationMember."""
+    """Test 1: Valid organization + valid employee registration creates User & OrganizationMember in INVITED (Pending Approval) status."""
     # Find existing registered active organization
     res_org = await db_session.execute(select(Organization).where(Organization.status == OrgStatus.ACTIVE).limit(1))
     org = res_org.scalar_one()
@@ -37,8 +37,8 @@ async def test_employee_registration_success(client: AsyncClient, db_session: As
     data = res.json()
 
     assert data["success"] is True
-    assert "access_token" in data
-    assert "refresh_token" in data
+    assert data["requires_approval"] is True
+    assert "submitted to the organization administrator" in data["message"]
     assert data["user"]["email"] == "devin.torres@company.ai"
     assert data["user"]["role"] == "EMPLOYEE"
     assert data["user"]["organization_id"] == org.id
@@ -52,7 +52,7 @@ async def test_employee_registration_success(client: AsyncClient, db_session: As
     assert user_row.employee_id == "EMP-9021"
     assert user_row.department == "Engineering"
 
-    # Verify OrganizationMember in Neon
+    # Verify OrganizationMember in Neon has INVITED (Pending Approval) status
     res_mem = await db_session.execute(
         select(OrganizationMember).where(
             OrganizationMember.organization_id == org.id,
@@ -62,7 +62,7 @@ async def test_employee_registration_success(client: AsyncClient, db_session: As
     mem_row = res_mem.scalar_one_or_none()
     assert mem_row is not None
     assert mem_row.role == "EMPLOYEE"
-    assert mem_row.status == MemberStatus.ACTIVE
+    assert mem_row.status == MemberStatus.INVITED
 
 
 @pytest.mark.asyncio
@@ -124,11 +124,25 @@ async def test_employee_registration_duplicate_email(client: AsyncClient, db_ses
 
 
 @pytest.mark.asyncio
-async def test_employee_can_login_after_registration(client: AsyncClient, db_session: AsyncSession):
-    """Test 10, 11: Registered employee can authenticate immediately and company admin can still log in."""
+async def test_employee_approval_workflow_and_post_approval_login(client: AsyncClient, db_session: AsyncSession):
+    """Test: Pending employee requires admin approval before login; reflects in pending stats."""
     res_org = await db_session.execute(select(Organization).limit(1))
     org = res_org.scalar_one()
 
+    # 1. Company Admin logs in
+    admin_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@company.ai", "password": "SecureAdmin1"},
+    )
+    assert admin_login.status_code == 200
+    admin_token = admin_login.json()["access_token"]
+
+    # 2. Check stats before registration
+    stats_before = await client.get(f"/api/v1/organizations/{org.id}/stats", headers={"Authorization": f"Bearer {admin_token}"})
+    assert stats_before.status_code == 200
+    pending_before = stats_before.json()["pending_invitations"]
+
+    # 3. New employee registers
     reg_payload = {
         "organization_id": org.id,
         "name": "Kiran Patel",
@@ -139,22 +153,44 @@ async def test_employee_can_login_after_registration(client: AsyncClient, db_ses
     reg_res = await client.post("/api/v1/onboarding/employee/register", json=reg_payload)
     assert reg_res.status_code == 201
 
-    # Employee Login
-    emp_login = await client.post(
+    # 4. Check stats after registration -> pending_invitations incremented!
+    stats_after = await client.get(f"/api/v1/organizations/{org.id}/stats", headers={"Authorization": f"Bearer {admin_token}"})
+    assert stats_after.status_code == 200
+    assert stats_after.json()["pending_invitations"] == pending_before + 1
+
+    # 5. Attempting to log in as employee before approval is rejected with 403
+    emp_login_early = await client.post(
         "/api/v1/auth/login",
         json={"email": "kiran.patel@company.ai", "password": "SecurePassword1"},
     )
-    assert emp_login.status_code == 200
-    assert emp_login.json()["user"]["role"] == "EMPLOYEE"
-    assert emp_login.json()["user"]["organization_id"] == org.id
+    assert emp_login_early.status_code == 403
+    assert "pending administrator approval" in emp_login_early.json()["error"]["message"]
 
-    # Company Admin Login still works perfectly
-    admin_login = await client.post(
-        "/api/v1/auth/login",
-        json={"email": "admin@company.ai", "password": "SecureAdmin1"},
+    # 6. Admin fetches detailed pending requests
+    pending_list = await client.get(
+        f"/api/v1/organizations/{org.id}/members/detailed?status=INVITED",
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert admin_login.status_code == 200
-    assert admin_login.json()["user"]["role"] == "ORG_ADMIN"
+    assert pending_list.status_code == 200
+    members = pending_list.json()
+    target_mem = next(m for m in members if m["email"] == "kiran.patel@company.ai")
+    assert target_mem["status"] == "INVITED"
+
+    # 7. Admin approves the pending employee
+    approve_res = await client.post(
+        f"/api/v1/organizations/{org.id}/members/{target_mem['id']}/approve",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert approve_res.status_code == 200
+    assert approve_res.json()["status"] == "ACTIVE"
+
+    # 8. Employee can now log in successfully
+    emp_login_success = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "kiran.patel@company.ai", "password": "SecurePassword1"},
+    )
+    assert emp_login_success.status_code == 200
+    assert emp_login_success.json()["user"]["role"] == "EMPLOYEE"
 
 
 @pytest.mark.asyncio
@@ -181,4 +217,4 @@ async def test_sqlite_agent_database_untouched_during_employee_registration(clie
     res_after = await db_session.execute(select(AgentSession))
     count_after = len(res_after.scalars().all())
 
-    assert count_before == count_after == 0  # No agent sessions created
+    assert count_before == count_after == 0

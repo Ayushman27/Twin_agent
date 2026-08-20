@@ -1,4 +1,4 @@
-"""Onboarding module — Business logic service."""
+"""Onboarding module — Business logic service for self-service registration."""
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from app.modules.onboarding.schemas import (
     PublicCompaniesResponse,
     PublicCompanyItem,
 )
-from app.modules.organizations.models import OrgStatus
+from app.modules.organizations.models import MemberStatus, OrgStatus
 from app.modules.organizations.repository import OrganizationRepository
 from app.modules.organizations.schemas import OrganizationResponse
 
@@ -24,8 +24,8 @@ from app.modules.organizations.schemas import OrganizationResponse
 class OnboardingService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.user_repo = UserRepository(db)
         self.org_repo = OrganizationRepository(db)
+        self.user_repo = UserRepository(db)
 
     async def list_public_companies(
         self, search: Optional[str] = None, limit: int = 50
@@ -41,53 +41,37 @@ class OnboardingService:
             )
             for org in orgs
         ]
-        return PublicCompaniesResponse(
-            success=True,
-            total=len(items),
-            data=items,
-        )
+        return PublicCompaniesResponse(success=True, total=len(items), data=items)
 
     async def register_company(self, data: CompanyRegisterRequest) -> CompanyRegisterResponse:
-        # 1. Duplicate organization checks
-        existing_org_email = await self.org_repo.get_by_email(data.company_email)
-        if existing_org_email:
+        # 1. Pre-validation duplicate checks against Neon PostgreSQL
+        existing_company_email = await self.org_repo.get_by_email(data.company_email)
+        if existing_company_email:
             raise ConflictException(
-                "This company is already registered. Please log in using your existing company administrator account."
+                f"A company with the email '{data.company_email}' is already registered."
             )
 
-        existing_org_name = await self.org_repo.get_by_name(data.company_name)
-        if existing_org_name:
+        existing_company_name = await self.org_repo.get_by_name(data.company_name)
+        if existing_company_name:
             raise ConflictException(
-                "This company is already registered. Please log in using your existing company administrator account."
+                f"A company named '{data.company_name}' is already registered. Please choose a distinct name."
             )
 
-        # 2. Duplicate administrator email check
-        existing_admin = await self.user_repo.get_by_email(data.admin_email)
-        if existing_admin:
+        existing_admin_user = await self.user_repo.get_by_email(data.admin_email)
+        if existing_admin_user:
             raise ConflictException(
-                "An account with this administrator email address already exists. Please log in or use a different email."
+                f"An administrator account with the email '{data.admin_email}' already exists. Please log in instead."
             )
 
-        # 3. Transactional creation
+        # 2. Atomic Database Transaction
         try:
-            # 3a. Create administrator User
-            admin_user = await self.user_repo.create(
-                name=data.admin_name.strip(),
-                email=data.admin_email.strip().lower(),
-                password_hash=hash_password(data.admin_password),
-                phone=data.admin_phone.strip() if data.admin_phone else None,
-                job_title="Organization Administrator",
-                role=UserRole.ORG_ADMIN,
-                is_active=True,
-            )
-
-            # 3b. Create Organization
+            # 2a. Insert Organization record
             org = await self.org_repo.create(
                 company_name=data.company_name.strip(),
                 company_email=data.company_email.strip().lower(),
                 company_phone=data.company_phone.strip() if data.company_phone else None,
-                industry=data.industry.strip(),
-                company_size=data.company_size.strip(),
+                industry=data.industry,
+                company_size=data.company_size,
                 employee_count=data.employee_count,
                 website=data.website.strip() if data.website else None,
                 country=data.country.strip() if data.country else None,
@@ -98,20 +82,33 @@ class OnboardingService:
                 status=OrgStatus.ACTIVE,
             )
 
-            # 3c. Link User <-> Organization as ORG_ADMIN
+            # 2b. Insert Administrator User record (role forced to ORG_ADMIN)
+            admin_user = await self.user_repo.create(
+                name=data.admin_name.strip(),
+                email=data.admin_email.strip().lower(),
+                password_hash=hash_password(data.admin_password),
+                phone=data.admin_phone.strip() if data.admin_phone else None,
+                job_title="Chief Technology Officer",
+                department="Executive Leadership",
+                role=UserRole.ORG_ADMIN,
+                is_active=True,
+            )
+
+            # 2c. Insert OrganizationMember association
             await self.org_repo.add_member(
                 org_id=org.id,
                 user_id=admin_user.id,
                 role="ORG_ADMIN",
+                status=MemberStatus.ACTIVE,
             )
 
-            # Commit atomic transaction
+            # Commit the atomic transaction
             await self.db.commit()
         except Exception:
             await self.db.rollback()
             raise
 
-        # 4. Generate access tokens
+        # 3. Issue Authentication Tokens for immediate onboarding access
         access_token = create_access_token(admin_user.id, {"role": admin_user.role.value})
         refresh_token = create_refresh_token(admin_user.id)
 
@@ -129,7 +126,24 @@ class OnboardingService:
             created_at=admin_user.created_at,
         )
 
-        org_resp = OrganizationResponse.model_validate(org)
+        org_resp = OrganizationResponse(
+            id=org.id,
+            company_name=org.company_name,
+            company_email=org.company_email,
+            company_phone=org.company_phone,
+            industry=org.industry,
+            company_size=org.company_size,
+            employee_count=org.employee_count,
+            website=org.website,
+            country=org.country,
+            city=org.city,
+            description=org.description,
+            business_model=org.business_model,
+            primary_contact=org.primary_contact,
+            status=org.status,
+            created_at=org.created_at,
+            updated_at=org.updated_at,
+        )
 
         return CompanyRegisterResponse(
             success=True,
@@ -169,11 +183,12 @@ class OnboardingService:
                 is_active=True,
             )
 
-            # 3b. Link User <-> Organization as EMPLOYEE in organization_members
+            # 3b. Link User <-> Organization as EMPLOYEE with INVITED (Pending Approval) status in organization_members
             await self.org_repo.add_member(
                 org_id=org.id,
                 user_id=employee_user.id,
                 role="EMPLOYEE",
+                status=MemberStatus.INVITED,
             )
 
             # Commit atomic transaction
@@ -181,10 +196,6 @@ class OnboardingService:
         except Exception:
             await self.db.rollback()
             raise
-
-        # 4. Generate access tokens
-        access_token = create_access_token(employee_user.id, {"role": employee_user.role.value})
-        refresh_token = create_refresh_token(employee_user.id)
 
         user_resp = UserResponse(
             id=employee_user.id,
@@ -204,9 +215,10 @@ class OnboardingService:
 
         return EmployeeRegisterResponse(
             success=True,
-            message="Employee registered successfully.",
-            access_token=access_token,
-            refresh_token=refresh_token,
+            message="Your registration request has been submitted to the organization administrator for approval.",
+            requires_approval=True,
+            access_token=None,
+            refresh_token=None,
             token_type="bearer",
             organization=org_resp,
             user=user_resp,

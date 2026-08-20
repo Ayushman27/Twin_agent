@@ -40,6 +40,14 @@ export interface EmployeeRegisterPayload {
   phone?: string;
 }
 
+export interface EmployeeRegisterResult {
+  success: boolean;
+  message: string;
+  requires_approval: boolean;
+  organization: { id: string; company_name: string };
+  user: User;
+}
+
 export interface AuthSession {
   user: User;
   access_token: string;
@@ -66,30 +74,24 @@ function getCookie(name: string): string | null {
 export const authService = {
   async login(payload: LoginPayload): Promise<AuthSession> {
     if (config.useMocks) {
-      const isEmployee = payload.email.includes("employee");
-      const isUnaffiliated = payload.email.includes("unaffiliated");
+      const isCompanyAdmin = payload.email.includes("admin") || payload.email.includes("org");
       const user: User = {
-        id: isEmployee ? "emp_1" : "usr_admin_1",
-        name: isEmployee ? "Rohan Mehta" : "Asha Verma",
+        id: "usr_" + Date.now(),
+        name: isCompanyAdmin ? "Asha Verma" : "Elena Rostova",
         email: payload.email,
-        role: isEmployee ? "EMPLOYEE" : "ORG_ADMIN",
-        organization_id: isUnaffiliated ? undefined : "org_1",
-        organizationId: isUnaffiliated ? undefined : "org_1",
+        role: isCompanyAdmin ? "ORG_ADMIN" : "EMPLOYEE",
+        organization_id: "org_default_1",
       };
       const session: AuthSession = {
         user,
-        access_token: "mock_jwt_token_" + (isEmployee ? "employee" : "org_admin"),
-        refresh_token: "mock_refresh_token",
+        access_token: "mock_jwt_token_development",
+        refresh_token: "mock_refresh_token_dev",
       };
-
       if (typeof window !== "undefined") {
         setCookie("access_token", session.access_token, payload.rememberMe ? 30 : 7);
         setCookie("user_role", session.user.role || "EMPLOYEE", payload.rememberMe ? 30 : 7);
-        const orgId = session.user.organization_id || session.user.organizationId;
-        if (orgId) {
-          setCookie("organization_id", orgId, payload.rememberMe ? 30 : 7);
-        } else {
-          deleteCookie("organization_id");
+        if (session.user.organization_id) {
+          setCookie("organization_id", session.user.organization_id, payload.rememberMe ? 30 : 7);
         }
         localStorage.setItem("access_token", session.access_token);
         localStorage.setItem("current_user", JSON.stringify(session.user));
@@ -190,7 +192,7 @@ export const authService = {
     return session;
   },
 
-  async registerEmployee(payload: EmployeeRegisterPayload): Promise<AuthSession> {
+  async registerEmployee(payload: EmployeeRegisterPayload): Promise<EmployeeRegisterResult> {
     if (config.useMocks) {
       const user: User = {
         id: "usr_emp_reg_" + Date.now(),
@@ -202,52 +204,17 @@ export const authService = {
         organization_id: payload.organization_id,
         organizationId: payload.organization_id,
       };
-      const session: AuthSession = {
+      return {
+        success: true,
+        message: "Your registration request has been submitted to the organization administrator for approval.",
+        requires_approval: true,
+        organization: { id: payload.organization_id, company_name: "Hutech Solutions" },
         user,
-        access_token: "mock_jwt_token_employee_registered",
-        refresh_token: "mock_refresh_token",
       };
-      if (typeof window !== "undefined") {
-        setCookie("access_token", session.access_token, 7);
-        setCookie("user_role", "EMPLOYEE", 7);
-        setCookie("organization_id", payload.organization_id, 7);
-        localStorage.setItem("access_token", session.access_token);
-        localStorage.setItem("current_user", JSON.stringify(session.user));
-      }
-      return session;
     }
 
-    const res = await apiClient.post<{
-      success: boolean;
-      message: string;
-      access_token: string;
-      refresh_token: string;
-      token_type: string;
-      organization: { id: string; company_name: string };
-      user: User;
-    }>("/onboarding/employee/register", payload);
-
-    const session: AuthSession = {
-      user: res.user,
-      access_token: res.access_token,
-      refresh_token: res.refresh_token,
-    };
-
-    if (typeof window !== "undefined") {
-      setCookie("access_token", session.access_token, 7);
-      setCookie("user_role", "EMPLOYEE", 7);
-      const orgId = session.user.organization_id || session.user.organizationId || payload.organization_id;
-      if (orgId) {
-        setCookie("organization_id", orgId, 7);
-      }
-      localStorage.setItem("access_token", session.access_token);
-      if (session.refresh_token) {
-        localStorage.setItem("refresh_token", session.refresh_token);
-      }
-      localStorage.setItem("current_user", JSON.stringify(session.user));
-    }
-
-    return session;
+    const res = await apiClient.post<EmployeeRegisterResult>("/onboarding/employee/register", payload);
+    return res;
   },
 
   async getMe(): Promise<User> {
@@ -258,20 +225,17 @@ export const authService = {
     }
     const res = await apiClient.get<{ success: boolean; data: User }>("/auth/me");
     const user = res.data;
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && user) {
       localStorage.setItem("current_user", JSON.stringify(user));
-      setCookie("user_role", user.role || "", 7);
       const orgId = user.organization_id || user.organizationId;
       if (orgId) {
         setCookie("organization_id", orgId, 7);
-      } else {
-        deleteCookie("organization_id");
       }
     }
     return user;
   },
 
-  logout(redirectPath = "/login") {
+  logout(redirectUrl?: string): void {
     if (typeof window !== "undefined") {
       deleteCookie("access_token");
       deleteCookie("user_role");
@@ -279,42 +243,25 @@ export const authService = {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("current_user");
-      if (redirectPath) {
-        window.location.href = redirectPath;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
       }
     }
   },
 
   getCurrentUser(): User | null {
     if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem("current_user");
-    if (!raw) return null;
+    const stored = localStorage.getItem("current_user");
+    if (!stored) return null;
     try {
-      return JSON.parse(raw) as User;
+      return JSON.parse(stored) as User;
     } catch {
       return null;
     }
   },
 
-  getToken(): string | null {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("access_token") || getCookie("access_token");
-  },
-
-  getUserRole(): string | null {
-    const user = this.getCurrentUser();
-    if (user?.role) return user.role;
-    return getCookie("user_role");
-  },
-
-  getUserOrgId(): string | null {
-    const user = this.getCurrentUser();
-    if (user?.organization_id) return user.organization_id;
-    if (user?.organizationId) return user.organizationId;
-    return getCookie("organization_id");
-  },
-
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    if (typeof window === "undefined") return false;
+    return !!localStorage.getItem("access_token") || !!getCookie("access_token");
   },
 };

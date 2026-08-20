@@ -194,10 +194,14 @@ async def test_search_companies_case_insensitive_and_partial(client: AsyncClient
 @pytest.mark.asyncio
 async def test_register_employee_success(client: AsyncClient):
     """Employee registration succeeds with valid existing org, creates user with EMPLOYEE role."""
-    # 1. Fetch existing organization ID
-    res_orgs = await client.get("/api/v1/onboarding/companies")
-    assert res_orgs.status_code == 200
-    org_id = res_orgs.json()["data"][0]["id"]
+    # 1. Admin login to get their registered organization
+    admin_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@company.ai", "password": "SecureAdmin1"},
+    )
+    assert admin_login.status_code == 200
+    admin_token = admin_login.json()["access_token"]
+    org_id = admin_login.json()["user"]["organization_id"]
 
     # 2. Register employee
     payload = {
@@ -216,8 +220,7 @@ async def test_register_employee_success(client: AsyncClient):
     data = response.json()
 
     assert data["success"] is True
-    assert "access_token" in data
-    assert "refresh_token" in data
+    assert data["requires_approval"] is True
 
     user = data["user"]
     assert user["name"] == "Vikram Sen"
@@ -227,8 +230,26 @@ async def test_register_employee_success(client: AsyncClient):
     assert "password" not in user
     assert "password_hash" not in user
 
-    # 3. Verify access_token works on /api/v1/auth/me
-    token = data["access_token"]
+    # Admin fetches detailed pending requests and approves
+    pending_list = await client.get(
+        f"/api/v1/organizations/{org_id}/members/detailed?status=INVITED",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert pending_list.status_code == 200
+    target_mem = next(m for m in pending_list.json() if m["email"] == "vikram.sen@company.ai")
+    approve_res = await client.post(
+        f"/api/v1/organizations/{org_id}/members/{target_mem['id']}/approve",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert approve_res.status_code == 200
+
+    # 3. Verify employee can log in and access /api/v1/auth/me after approval
+    emp_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "vikram.sen@company.ai", "password": "SecurePassword1"},
+    )
+    assert emp_login.status_code == 200
+    token = emp_login.json()["access_token"]
     res_me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res_me.status_code == 200
     assert res_me.json()["data"]["email"] == "vikram.sen@company.ai"

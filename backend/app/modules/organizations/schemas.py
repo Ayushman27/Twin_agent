@@ -66,3 +66,25 @@ class MemberResponse(BaseModel):
     user_id:         str
     role:            str
     status:          MemberStatus
+
+
+class MemberDetailResponse(BaseModel):
+    id:              str
+    organization_id: str
+    user_id:         str
+    role:            str
+    status:          MemberStatus
+    name:            Optional[str] = None
+    email:           Optional[str] = None
+    employee_id:     Optional[str] = None
+    department:      Optional[str] = None
+    job_title:       Optional[str] = None
+    created_at:      Optional[datetime] = None
+
+
+class OrganizationStatsResponse(BaseModel):
+    total_members:       int
+    active_members:      int
+    pending_invitations: int
+    teams_count:         int = 6
+    roles_count:         int = 14
