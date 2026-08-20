@@ -111,6 +111,20 @@ const config: Config = {
         "tech-glow":  "0 0 10px rgba(0, 255, 65, 0.1)",
         "hard":       "2px 2px 0 #000",
       },
+      keyframes: {
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(300%)" },
+        },
+        "grid-flow": {
+          "0%": { transform: "translateY(-50%)" },
+          "100%": { transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        shimmer: "shimmer 2s linear infinite",
+        "grid-flow": "grid-flow 20s linear infinite",
+      },
     },
   },
   plugins: [],

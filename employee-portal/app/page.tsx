@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   User,
@@ -18,10 +19,38 @@ import {
 } from "lucide-react";
 
 export default function EmployeeLandingPage() {
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const updateMousePosition = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("mousemove", updateMousePosition);
+    return () => window.removeEventListener("mousemove", updateMousePosition);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#050806] text-[#e5e2e1] font-sans relative overflow-x-hidden selection:bg-[#00ff41] selection:text-[#050505]">
+      {/* ── Cursor Glow ── */}
+      <div 
+        className="pointer-events-none fixed inset-0 z-30 transition-opacity duration-300"
+        style={{
+          background: `radial-gradient(600px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(0,255,65,0.06), transparent 40%)`
+        }}
+      />
+
+      {/* ── Fluid Dotted Moving Structure ── */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-70">
+        {/* Layer 1: Slow counter-clockwise rotation */}
+        <div className="absolute -inset-[100%] bg-[radial-gradient(circle,#00ff4188_2px,transparent_2px)] bg-[size:50px_50px] animate-[spin_90s_linear_infinite_reverse] origin-center" />
+        {/* Layer 2: Slow clockwise rotation with larger dots */}
+        <div className="absolute -inset-[100%] bg-[radial-gradient(circle,#00ff4166_2.5px,transparent_2.5px)] bg-[size:80px_80px] animate-[spin_120s_linear_infinite] origin-center" />
+        {/* Layer 3: Vertical drift */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle,#00ff4155_3px,transparent_3px)] bg-[size:100px_100px] animate-[grid-flow_30s_linear_infinite]" />
+      </div>
+
       {/* ── Cybernetic Background Grid ── */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00ff410d_1px,transparent_1px),linear-gradient(to_bottom,#00ff410d_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00ff410d_1px,transparent_1px),linear-gradient(to_bottom,#00ff410d_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none animate-[grid-flow_20s_linear_infinite]" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-[#00ff4115] via-transparent to-transparent blur-3xl pointer-events-none" />
 
       {/* ── Top Navigation Bar ── */}
