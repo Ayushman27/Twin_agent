@@ -3,8 +3,8 @@
 import { useUIStore } from "../../stores/ui.store";
 
 export function CommandPalette() {
-  const open = useUIStore((s) => s.commandPaletteOpen);
-  const close = useUIStore((s) => s.closeCommandPalette);
+  const open = useUIStore((s: any) => s.commandPaletteOpen);
+  const close = useUIStore((s: any) => s.closeCommandPalette);
 
   if (!open) return null;
 

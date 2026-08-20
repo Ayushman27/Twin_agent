@@ -7,13 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.db.session import get_db
-from app.agentic.models import AgentExecution, ApprovalRequest
+from app.agentic.models import AgentExecution, ApprovalRequest, Agent
 from app.agentic.schemas import AgentExecutionResponse
 from app.agentic.orchestrator.orchestrator import Orchestrator
 
 
 router = APIRouter()
 
+
+@router.get("/agents")
+async def list_agents(db: AsyncSession = Depends(get_db)):
+    """List all available agents."""
+    result = await db.execute(select(Agent))
+    agents = result.scalars().all()
+    return agents
 
 @router.post("/agents/{agent_id}/execute")
 async def execute_agent(

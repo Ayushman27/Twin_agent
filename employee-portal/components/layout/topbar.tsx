@@ -1,10 +1,15 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
-import { Bell, HelpCircle, LogOut } from "lucide-react";
+import { Bell, HelpCircle, LogOut, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Topbar() {
   const { user, logout } = useAuth();
+  const pathname = usePathname();
+
+  const isDashboardActive = pathname === "/dashboard";
 
   const initials = user?.name
     ? user.name
@@ -17,11 +22,25 @@ export function Topbar() {
 
   return (
     <header className="bg-surface-dim/80 backdrop-blur-md fixed top-0 right-0 left-[240px] z-50 border-b border-border-tech flex items-center justify-between px-margin_md h-[80px]">
-      {/* Left: title + status */}
+      {/* Left: title + Dashboard button + status */}
       <div className="flex items-center gap-6">
         <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface">
           Twin Agent Workspace
         </h2>
+
+        {/* Dashboard Button on Navbar */}
+        <Link
+          href="/dashboard"
+          className={`flex items-center gap-2 px-3 py-1.5 rounded border transition-colors duration-200 cursor-pointer ${
+            isDashboardActive
+              ? "border-primary-container text-primary-fixed-dim bg-surface-container-low"
+              : "border-border-tech text-on-surface-variant hover:border-primary-container hover:text-on-surface bg-surface-container-high"
+          }`}
+        >
+          <LayoutDashboard size={16} className="text-primary-container" />
+          <span className="font-label-caps text-label-caps font-semibold">Dashboard</span>
+        </Link>
+
         <div className="hidden lg:flex items-center gap-4 text-on-surface-variant">
           <span className="font-label-caps text-label-caps flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-container pulse-green inline-block" />

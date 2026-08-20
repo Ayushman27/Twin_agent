@@ -1,10 +1,11 @@
 "use client";
 
+// @ts-ignore
 import dynamic from "next/dynamic";
-import type { EChartsOption } from "echarts";
 
+// @ts-ignore
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
-export function EChart({ option, height = 280 }: { option: EChartsOption; height?: number }) {
+export function EChart({ option, height = 280 }: { option: any; height?: number }) {
   return <ReactECharts option={option} style={{ height }} />;
 }

@@ -1,13 +1,119 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { LoadingState } from "@shared/components/status/loading-state";
+import { 
+  Mic, 
+  MicOff, 
+  Volume2, 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  Filter, 
+  Plus, 
+  Search, 
+  Bot, 
+  Sparkles, 
+  Send, 
+  Check, 
+  ArrowRight,
+  ListTodo,
+  Layers,
+  ChevronRight,
+  ShieldCheck,
+  Play
+} from "lucide-react";
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: "IN_PROGRESS" | "PENDING_APPROVAL" | "COMPLETED" | "QUEUED";
+  priority: "HIGH" | "MEDIUM" | "CRITICAL";
+  assignedAgent: string;
+  dueDate: string;
+}
+
+const INITIAL_TASKS: Task[] = [
+  {
+    id: "TSK-101",
+    title: "Approve CI/CD deployment to staging",
+    description: "Agent has prepared v2.4 package. Requires authorization for sensitive routing changes.",
+    status: "PENDING_APPROVAL",
+    priority: "CRITICAL",
+    assignedAgent: "SEC_OP_09",
+    dueDate: "Today, 5:00 PM",
+  },
+  {
+    id: "TSK-102",
+    title: "Analyze system dependencies for v2.4 core upgrade",
+    description: "Cross-referencing lib-auth mapping and verifying backward compatibility across microservices.",
+    status: "IN_PROGRESS",
+    priority: "HIGH",
+    assignedAgent: "DEV_AGENT_01",
+    dueDate: "Today, 6:30 PM",
+  },
+  {
+    id: "TSK-103",
+    title: "Run automated security vulnerability scan",
+    description: "Execute static analysis on legacy auth modules and generate evidence report.",
+    status: "QUEUED",
+    priority: "MEDIUM",
+    assignedAgent: "AUDIT_TWIN",
+    dueDate: "Tomorrow, 10:00 AM",
+  },
+  {
+    id: "TSK-104",
+    title: "Index Slack thread: 'Staging deployment fails'",
+    description: "Extract root cause analysis from incident channel and append to Knowledge base.",
+    status: "COMPLETED",
+    priority: "MEDIUM",
+    assignedAgent: "KNOWLEDGE_RAG",
+    dueDate: "Completed 2h ago",
+  },
+  {
+    id: "TSK-105",
+    title: "Scale up PostgreSQL database connections",
+    description: "Adjust connection pool size to accommodate peak load during evening sync.",
+    status: "COMPLETED",
+    priority: "HIGH",
+    assignedAgent: "SYS_OP_02",
+    dueDate: "Completed 4h ago",
+  },
+];
+
+interface ChatMessage {
+  id: string;
+  sender: "user" | "ai";
+  text: string;
+  timestamp: string;
+  isVoice?: boolean;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoading, isAuthenticated, isEmployee, hasOrganization } = useAuth();
+
+  // Task State
+  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [taskFilter, setTaskFilter] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+
+  // Voice Chat Interface State
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "msg-1",
+      sender: "ai",
+      text: "Hello Rohan! I am your AI Twin. I'm actively monitoring your 5 assigned tasks. How can I assist you by voice?",
+      timestamp: "10:40 AM",
+    },
+  ]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -29,301 +135,435 @@ export default function DashboardPage() {
     return <LoadingState label="Redirecting to Employee Login..." />;
   }
 
+  // Task Actions
+  const handleAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+
+    const newTask: Task = {
+      id: `TSK-${Math.floor(100 + Math.random() * 900)}`,
+      title: newTaskTitle.trim(),
+      description: "User defined task assigned to Twin Execution Engine.",
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      assignedAgent: "TWIN_EXEC",
+      dueDate: "Today",
+    };
+
+    setTasks([newTask, ...tasks]);
+    setNewTaskTitle("");
+  };
+
+  const handleToggleTaskStatus = (taskId: string) => {
+    setTasks(
+      tasks.map((t) =>
+        t.id === taskId
+          ? { ...t, status: t.status === "COMPLETED" ? "IN_PROGRESS" : "COMPLETED" }
+          : t
+      )
+    );
+  };
+
+  // Voice Chat Handlers
+  const toggleListening = () => {
+    if (isListening) {
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      setIsSpeaking(false);
+      // Simulate speech recognition result after 2.5 seconds
+      setTimeout(() => {
+        setIsListening(false);
+        const userQuery = "Summarize the critical tasks requiring my approval.";
+        addMessage("user", userQuery, true);
+        
+        // AI Voice Response
+        setIsSpeaking(true);
+        setTimeout(() => {
+          addMessage(
+            "ai",
+            "You have 1 Critical task pending approval: 'Approve CI/CD deployment to staging'. Would you like me to approve it for you?",
+            false
+          );
+          setTimeout(() => setIsSpeaking(false), 3000);
+        }, 1200);
+      }, 2500);
+    }
+  };
+
+  const handleSendMessage = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!voiceText.trim()) return;
+
+    const text = voiceText.trim();
+    addMessage("user", text);
+    setVoiceText("");
+
+    // AI Response Simulation
+    setIsSpeaking(true);
+    setTimeout(() => {
+      addMessage("ai", `Received query: "${text}". Processing via Twin Knowledge Base... All tasks remain synchronized.`);
+      setIsSpeaking(false);
+    }, 1000);
+  };
+
+  const addMessage = (sender: "user" | "ai", text: string, isVoice = false) => {
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setChatMessages((prev) => [
+      ...prev,
+      { id: `msg-${Date.now()}`, sender, text, timestamp: time, isVoice },
+    ]);
+  };
+
+  // Filter Tasks
+  const filteredTasks = tasks.filter((t) => {
+    const matchesFilter =
+      taskFilter === "ALL" ||
+      (taskFilter === "IN_PROGRESS" && t.status === "IN_PROGRESS") ||
+      (taskFilter === "PENDING_APPROVAL" && t.status === "PENDING_APPROVAL") ||
+      (taskFilter === "COMPLETED" && t.status === "COMPLETED");
+
+    const matchesSearch =
+      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.assignedAgent.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesFilter && matchesSearch;
+  });
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-grid_unit h-full animate-fade-in-up">
-      {/* ── Left Column: Context ── */}
-      <div className="flex flex-col gap-grid_unit">
-        {/* Human Twin Context */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit gap-4">
-          <div className="flex items-center gap-4 border-b border-border-tech pb-4">
-            <div className="w-12 h-12 border border-border-tech bg-surface-layer flex items-center justify-center">
-              <span className="material-symbols-outlined text-primary-container">person</span>
-            </div>
-            <div>
-              <div className="font-label-caps text-label-caps text-on-surface-variant mb-1">
-                Human Twin Context
-              </div>
-              <div className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
-                {user?.name?.toUpperCase() || "EMP_DIGITAL_TWIN"}
-              </div>
-              <div className="font-code-sm text-[11px] text-primary-container">
-                {user?.job_title || "Software Engineer"} • {user?.role || "EMPLOYEE"}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="font-code-sm text-code-sm text-on-surface-variant">
-              Context Synchronization
-            </span>
-            <div className="flex items-center gap-2">
+      {/* ── Left & Center Columns: All Tasks Workspace (Span 2) ── */}
+      <div className="lg:col-span-2 flex flex-col gap-grid_unit">
+        {/* Welcome Header */}
+        <div className="dark-glass rounded p-grid_unit flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-label-caps text-xs text-primary-container font-semibold tracking-wider">
+                WORKSPACE // EMPLOYEE TASKS
+              </span>
               <span className="w-2 h-2 rounded-full bg-primary-container pulse-green" />
-              <span className="font-code-sm text-code-sm text-primary-container">100% Loaded</span>
+            </div>
+            <h2 className="font-headline-lg text-2xl font-bold text-on-surface">
+              Welcome, {user?.name || "Rohan Mehta"}
+            </h2>
+            <p className="font-code-sm text-xs text-on-surface-variant mt-0.5">
+              Manage all assigned tasks and supervise your autonomous Digital Twin execution.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="px-3 py-1.5 bg-surface-container-high border border-border-tech rounded flex items-center gap-2 font-code-sm text-xs text-on-surface">
+              <ListTodo size={14} className="text-primary-container" />
+              <span>{tasks.filter((t) => t.status !== "COMPLETED").length} Active Tasks</span>
             </div>
           </div>
         </div>
 
-        {/* Persona & Memory Index */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit flex-1">
-          <div className="font-label-caps text-label-caps text-on-surface-variant border-b border-border-tech pb-2 mb-4">
-            Persona &amp; Memory Index
-          </div>
+        {/* Task Control & Add Bar */}
+        <div className="dark-glass rounded p-grid_unit flex flex-col gap-4">
+          <form onSubmit={handleAddTask} className="flex gap-2">
+            <input
+              type="text"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              placeholder="+ Add a new task for your AI Twin..."
+              className="flex-1 bg-surface-container-lowest border border-border-tech rounded px-4 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container transition-colors"
+            />
+            <button
+              type="submit"
+              className="px-5 py-2.5 bg-primary-container text-on-primary font-label-caps text-xs font-bold rounded flex items-center gap-2 hover:bg-primary-fixed transition-colors"
+            >
+              <Plus size={16} /> Add Task
+            </button>
+          </form>
 
-          <div className="mb-4">
-            <div className="font-code-sm text-code-sm text-on-surface mb-2">Active Projects</div>
-            <div className="flex flex-wrap gap-2">
-              <span className="px-2 py-1 bg-surface-container-high border border-border-tech font-code-sm text-code-sm text-on-surface rounded-sm">
-                Project: Alpha Orionis
-              </span>
-              <span className="px-2 py-1 bg-surface-container-high border border-border-tech font-code-sm text-code-sm text-on-surface rounded-sm">
-                v2.4 Core Upgrade
-              </span>
+          {/* Filters & Search */}
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 pt-2 border-t border-border-tech">
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-1 overflow-x-auto scroll-hidden pb-1 sm:pb-0">
+              {[
+                { id: "ALL", label: "All Tasks" },
+                { id: "IN_PROGRESS", label: "In Progress" },
+                { id: "PENDING_APPROVAL", label: "Pending Approval" },
+                { id: "COMPLETED", label: "Completed" },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  onClick={() => setTaskFilter(filter.id)}
+                  className={`px-3 py-1.5 rounded font-label-caps text-xs transition-colors whitespace-nowrap ${
+                    taskFilter === filter.id
+                      ? "bg-primary-container/10 border border-primary-container text-primary-fixed-dim font-bold"
+                      : "bg-surface-container-high border border-transparent text-on-surface-variant hover:text-on-surface"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
             </div>
-          </div>
 
-          <div className="mb-4">
-            <div className="font-code-sm text-code-sm text-on-surface mb-2">Skill Matrix Alignment</div>
-            <div className="flex flex-wrap gap-2">
-              <span className="px-2 py-1 bg-surface-layer border border-border-tech font-code-sm text-[10px] text-on-surface-variant rounded-sm">Python [98%]</span>
-              <span className="px-2 py-1 bg-surface-layer border border-border-tech font-code-sm text-[10px] text-on-surface-variant rounded-sm">Rust [92%]</span>
-              <span className="px-2 py-1 bg-surface-layer border border-border-tech font-code-sm text-[10px] text-on-surface-variant rounded-sm">System Arch [99%]</span>
+            {/* Search Input */}
+            <div className="relative min-w-[200px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks..."
+                className="w-full bg-surface-container-lowest border border-border-tech rounded pl-8 pr-3 py-1.5 font-code-sm text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container"
+              />
             </div>
-          </div>
-
-          <div className="flex-1 border-t border-border-tech pt-4">
-            <div className="font-code-sm text-code-sm text-on-surface mb-2">Recent Memory Ingestion</div>
-            <ul className="space-y-2 font-code-sm text-code-sm text-on-surface-variant">
-              <li className="flex items-start gap-2">
-                <span className="text-primary-container">›</span>
-                Parsed 4,201 lines from legacy auth.py
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary-container">›</span>
-                Indexed Slack thread: &quot;Staging deployment fails&quot;
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary-container">›</span>
-                Updated conceptual model for Service Mesh routing
-              </li>
-            </ul>
           </div>
         </div>
 
-        {/* Current Work Context */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit glow-active">
-          <div className="font-label-caps text-label-caps text-primary-container border-b border-border-tech pb-2 mb-4">
-            Current Work Context
-          </div>
-          <div className="font-code-sm text-code-sm text-on-surface mb-1">
-            Target: Project Alpha Orionis
-          </div>
-          <div className="font-code-sm text-code-sm text-on-surface-variant text-xs mb-4">
-            Focus: Dependency analysis for upcoming release.
-          </div>
-          <div className="flex justify-between items-center text-xs">
-            <span className="font-label-caps text-label-caps text-on-surface-variant">RAG Status</span>
-            <span className="font-code-sm text-code-sm text-primary-container">Active — 4 Vectors</span>
-          </div>
+        {/* All Tasks List */}
+        <div className="flex flex-col gap-3 flex-1 overflow-y-auto scroll-hidden pr-1">
+          {filteredTasks.length === 0 ? (
+            <div className="dark-glass rounded p-12 flex flex-col items-center justify-center text-center">
+              <CheckCircle2 size={40} className="text-primary-container/40 mb-3" />
+              <h3 className="font-headline-lg text-lg text-on-surface font-semibold">No Tasks Found</h3>
+              <p className="font-code-sm text-xs text-on-surface-variant mt-1">
+                There are no tasks matching your current filter criteria.
+              </p>
+            </div>
+          ) : (
+            filteredTasks.map((task) => {
+              const isCompleted = task.status === "COMPLETED";
+              const isApprovalNeeded = task.status === "PENDING_APPROVAL";
+
+              return (
+                <div
+                  key={task.id}
+                  className={`dark-glass rounded p-grid_unit border transition-all ${
+                    isApprovalNeeded
+                      ? "border-error/50 bg-error-container/5"
+                      : isCompleted
+                      ? "border-border-tech/40 opacity-70"
+                      : "border-border-tech hover:border-primary-container/40"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      {/* Status Checkbox */}
+                      <button
+                        onClick={() => handleToggleTaskStatus(task.id)}
+                        className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center transition-colors border ${
+                          isCompleted
+                            ? "bg-primary-container border-primary-container text-on-primary"
+                            : "border-border-tech hover:border-primary-container bg-surface-layer"
+                        }`}
+                      >
+                        {isCompleted && <Check size={12} strokeWidth={3} />}
+                      </button>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-mono text-xs text-primary-container font-semibold">
+                            {task.id}
+                          </span>
+                          <span
+                            className={`font-label-caps text-[9px] px-2 py-0.5 rounded font-bold ${
+                              task.priority === "CRITICAL"
+                                ? "bg-error/20 text-error border border-error/30"
+                                : task.priority === "HIGH"
+                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                : "bg-surface-container-high text-on-surface-variant"
+                            }`}
+                          >
+                            {task.priority}
+                          </span>
+                          <span
+                            className={`font-label-caps text-[9px] px-2 py-0.5 rounded ${
+                              isApprovalNeeded
+                                ? "bg-error/20 text-error font-bold"
+                                : isCompleted
+                                ? "bg-primary-container/20 text-primary-container"
+                                : "bg-blue-500/20 text-blue-400"
+                            }`}
+                          >
+                            {task.status.replace("_", " ")}
+                          </span>
+                        </div>
+
+                        <h4
+                          className={`font-semibold text-sm ${
+                            isCompleted ? "line-through text-on-surface-variant" : "text-on-surface"
+                          }`}
+                        >
+                          {task.title}
+                        </h4>
+                        <p className="font-code-sm text-xs text-on-surface-variant mt-1 leading-relaxed">
+                          {task.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions & Agent Badge */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 font-label-caps text-[10px] text-on-surface-variant bg-surface-layer px-2.5 py-1 rounded border border-border-tech">
+                        <Bot size={12} className="text-primary-container" />
+                        <span>{task.assignedAgent}</span>
+                      </div>
+
+                      {isApprovalNeeded && (
+                        <button
+                          onClick={() => handleToggleTaskStatus(task.id)}
+                          className="px-3 py-1 bg-primary-container text-on-primary font-label-caps text-[10px] font-bold rounded hover:bg-primary-fixed transition-colors flex items-center gap-1"
+                        >
+                          Approve Now <ChevronRight size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* ── Center Column: Active Agent ── */}
-      <div className="flex flex-col gap-grid_unit">
-        {/* Terminal Feed */}
-        <div className="dark-glass rounded flex flex-col flex-1 overflow-hidden relative min-h-[400px]">
-          {/* Terminal header */}
-          <div className="bg-surface-layer border-b border-border-tech p-3 flex justify-between items-center">
-            <div className="font-label-caps text-label-caps text-on-surface-variant">
-              Live Agent Activity
-            </div>
-            <div className="flex gap-1">
-              <div className="w-2 h-2 rounded-full bg-border-tech" />
-              <div className="w-2 h-2 rounded-full bg-border-tech" />
-              <div className="w-2 h-2 rounded-full bg-primary-container pulse-green" />
-            </div>
-          </div>
-
-          {/* Log output */}
-          <div className="p-grid_unit font-code-sm text-code-sm space-y-3 overflow-y-auto scroll-hidden flex-1">
-            <div className="text-on-surface-variant">
-              <span className="text-primary-container">[10:42:01] [AGENT_01] </span>
-              Initiating task: &apos;Analyzing system dependencies for v2.4 deployment&apos;
-            </div>
-            <div className="text-on-surface-variant">
-              <span className="text-primary-container">[10:42:05] [AGENT_01] </span>
-              Querying internal package registry... OK
-            </div>
-            <div className="text-on-surface-variant">
-              <span className="text-primary-container">[10:42:12] [AGENT_01] </span>
-              Detected conflict in `lib-auth` version mapping. Resolving...
-            </div>
-            <div className="text-on-surface">
-              <span className="text-primary-container">[10:42:15] [AGENT_01] </span>
-              Analyzing impact on dependent microservices...
-            </div>
-
-            {/* Thinking block */}
-            <div className="flex items-center gap-3 my-4 border border-border-tech p-4 bg-base-layer">
-              <span className="material-symbols-outlined text-primary-container pulse-green text-[28px]">psychology</span>
-              <div className="flex flex-col">
-                <span className="font-label-caps text-label-caps text-primary-container">Agent Thinking</span>
-                <span className="text-on-surface-variant text-xs mt-1">
-                  Cross-referencing deployment histories...
+      {/* ── Right Column: Voice Chat Interface (Span 1) ── */}
+      <div className="lg:col-span-1 flex flex-col gap-grid_unit">
+        {/* Voice Assistant Module */}
+        <div className="dark-glass rounded p-grid_unit flex flex-col flex-1 border border-border-tech relative overflow-hidden min-h-[580px]">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border-tech pb-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded bg-primary-container/10 border border-primary-container/20 text-primary-container">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <h3 className="font-label-caps text-xs font-bold text-on-surface">Voice Assistant</h3>
+                <span className="font-code-sm text-[10px] text-primary-container flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary-container pulse-green" />
+                  Twin AI Active
                 </span>
               </div>
             </div>
-
-            <div className="text-on-surface-variant">
-              <span className="text-primary-container">[10:42:30] [AGENT_01] </span>
-              Cross-reference complete. No breaking changes detected in staging env.
-            </div>
-            <div className="flex items-center gap-2 text-primary-container">
-              <span className="material-symbols-outlined text-sm">check_circle</span>
-              <span>Task completed with 94% confidence score.</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Evidence Log + Confidence Score */}
-        <div className="grid grid-cols-2 gap-grid_unit">
-          {/* Evidence Log */}
-          <div className="dark-glass rounded flex flex-col p-grid_unit">
-            <div className="font-label-caps text-label-caps text-on-surface-variant border-b border-border-tech pb-2 mb-4">
-              Evidence Log
-            </div>
-            <div className="flex flex-col gap-2 font-code-sm text-code-sm text-on-surface-variant">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-container text-sm">check</span>
-                Code checked
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-container text-sm">check</span>
-                Tests triggered (All pass)
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary-container text-sm">check</span>
-                Security scan OK
-              </div>
-              <div className="flex items-center gap-2 opacity-50">
-                <span className="material-symbols-outlined text-sm">hourglass_empty</span>
-                Policy validation pending
-              </div>
+            <div className="flex items-center gap-1">
+              <Volume2 size={16} className="text-on-surface-variant" />
             </div>
           </div>
 
-          {/* Confidence Score */}
-          <div className="dark-glass rounded flex flex-col items-center justify-center relative p-grid_unit">
-            <div className="absolute top-4 left-4 font-label-caps text-label-caps text-on-surface-variant">
-              Confidence Score
-            </div>
-            <div className="relative w-28 h-28 flex items-center justify-center mt-6">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="#1A1A1A" strokeWidth="10" />
-                <circle
-                  cx="50" cy="50" r="45" fill="none"
-                  stroke="#00FF41" strokeWidth="10"
-                  strokeDasharray="283" strokeDashoffset="17"
-                  className="transition-all duration-1000 ease-out"
+          {/* Interactive Mic Visualizer Hero */}
+          <div className="bg-surface-container-lowest border border-border-tech rounded-lg p-5 mb-4 flex flex-col items-center justify-center relative overflow-hidden">
+            {/* Audio Wave Animated Bars */}
+            <div className="flex items-center justify-center gap-1.5 h-12 mb-4 w-full px-4">
+              {[40, 75, 30, 90, 50, 80, 45, 95, 60, 30, 70, 40].map((h, i) => (
+                <div
+                  key={i}
+                  className={`w-1 rounded-full transition-all duration-300 ${
+                    isListening || isSpeaking
+                      ? "bg-primary-container animate-pulse"
+                      : "bg-border-tech"
+                  }`}
+                  style={{
+                    height: isListening || isSpeaking ? `${Math.max(15, (h * (i % 2 === 0 ? 1 : 0.7)))}%` : "12%",
+                    animationDelay: `${i * 0.1}s`,
+                  }}
                 />
-              </svg>
-              <div className="absolute flex flex-col items-center">
-                <span className="font-display-xl text-[32px] text-primary-container leading-none">
-                  94<span className="text-xl">%</span>
-                </span>
-              </div>
+              ))}
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Right Column: Approvals & Health ── */}
-      <div className="flex flex-col gap-grid_unit">
-        {/* Action Required */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit flex-1 border border-error-container relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-1 h-full bg-error-container" />
-          <div className="font-label-caps text-label-caps text-error border-b border-border-tech pb-2 mb-4 flex justify-between items-center">
-            <span>Action Required</span>
-            <span className="material-symbols-outlined text-sm">warning</span>
+            {/* Large Glowing Mic Toggle Button */}
+            <button
+              onClick={toggleListening}
+              className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer ${
+                isListening
+                  ? "bg-primary-container text-on-primary shadow-[0_0_30px_rgba(0,255,65,0.6)] scale-105"
+                  : isSpeaking
+                  ? "bg-amber-500 text-black shadow-[0_0_20px_rgba(245,158,11,0.4)]"
+                  : "bg-surface-container-high text-primary-container border border-primary-container/40 hover:border-primary-container hover:shadow-[0_0_15px_rgba(0,255,65,0.2)]"
+              }`}
+            >
+              {isListening ? (
+                <MicOff size={28} className="animate-pulse" />
+              ) : (
+                <Mic size={28} />
+              )}
+            </button>
+
+            <span className="font-label-caps text-xs font-semibold mt-3 text-on-surface">
+              {isListening
+                ? "Listening... Speak Now"
+                : isSpeaking
+                ? "Twin AI Speaking..."
+                : "Click Mic to Start Voice Command"}
+            </span>
           </div>
-          <div className="flex flex-col gap-4">
-            <div className="bg-background border border-border-tech p-3 rounded-sm">
-              <div className="font-code-sm text-code-sm text-on-surface mb-2">
-                Approve CI/CD deployment to staging
-              </div>
-              <div className="font-code-sm text-code-sm text-on-surface-variant text-xs mb-3">
-                Agent has prepared v2.4 package. All pre-flight checks passed. Requires human-in-the-loop
-                authorization due to sensitive routing changes.
-              </div>
-              <div className="flex gap-2">
-                <button className="flex-1 py-1.5 bg-primary-container text-on-primary font-label-caps text-label-caps font-bold hover:bg-primary-fixed transition-colors text-xs">
-                  Approve
+
+          {/* Quick Voice Prompts */}
+          <div className="mb-4">
+            <span className="font-label-caps text-[10px] text-on-surface-variant mb-2 block">
+              SUGGESTED VOICE PROMPTS
+            </span>
+            <div className="flex flex-col gap-1.5">
+              {[
+                "Summarize critical tasks for today",
+                "Approve pending deployment task",
+                "Run automated security audit",
+              ].map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setVoiceText(prompt);
+                    handleSendMessage();
+                  }}
+                  className="w-full text-left px-3 py-1.5 rounded bg-surface-layer border border-border-tech hover:border-primary-container font-code-sm text-xs text-on-surface-variant hover:text-primary-container transition-colors flex items-center justify-between"
+                >
+                  <span>&quot;{prompt}&quot;</span>
+                  <ArrowRight size={12} />
                 </button>
-                <button className="flex-1 py-1.5 bg-transparent border border-border-tech text-on-surface font-label-caps text-label-caps hover:border-primary-container transition-colors text-xs">
-                  Review Diff
-                </button>
-              </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        {/* Network Notifications */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit h-56">
-          <div className="font-label-caps text-label-caps text-on-surface-variant border-b border-border-tech pb-2 mb-4">
-            Network Notifications
-          </div>
-          <div className="flex flex-col gap-3 font-code-sm text-code-sm overflow-y-auto scroll-hidden">
-            <div className="flex gap-2 border-l-2 border-border-tech pl-2">
-              <span className="text-on-surface-variant text-[10px] whitespace-nowrap">10:30 AM</span>
-              <span className="text-on-surface">
-                Agent <span className="text-primary-container">SYS_OP_02</span> scaled up DB instances.
-              </span>
-            </div>
-            <div className="flex gap-2 border-l-2 border-border-tech pl-2">
-              <span className="text-on-surface-variant text-[10px] whitespace-nowrap">10:15 AM</span>
-              <span className="text-on-surface">
-                Agent <span className="text-primary-container">SEC_09</span> identified anomaly in ingress traffic. Investigating.
-              </span>
-            </div>
-            <div className="flex gap-2 border-l-2 border-border-tech pl-2">
-              <span className="text-on-surface-variant text-[10px] whitespace-nowrap">09:55 AM</span>
-              <span className="text-on-surface">
-                Agent <span className="text-primary-container">DATA_PIPE_1</span> finished daily ETL ingestion.
-              </span>
-            </div>
-          </div>
-        </div>
+          {/* Real-time Voice Chat Transcript Stream */}
+          <div className="flex-1 border-t border-border-tech pt-3 flex flex-col justify-between overflow-hidden">
+            <span className="font-label-caps text-[10px] text-on-surface-variant mb-2 block">
+              LIVE CONVERSATION TRANSCRIPT
+            </span>
 
-        {/* System Health Chart */}
-        <div className="dark-glass rounded flex flex-col p-grid_unit h-56">
-          <div className="font-label-caps text-label-caps text-on-surface-variant border-b border-border-tech pb-2 mb-4">
-            System Health &amp; Routing
-          </div>
-          <div className="flex-1 relative flex items-end gap-1">
-            <div className="w-1/6 bg-border-tech h-[30%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-on-surface-variant opacity-0 group-hover:opacity-100">SLM</div>
+            <div className="flex-1 overflow-y-auto scroll-hidden space-y-3 pr-1 max-h-[220px]">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${
+                    msg.sender === "user" ? "items-end" : "items-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[85%] p-3 rounded-lg text-xs leading-relaxed ${
+                      msg.sender === "user"
+                        ? "bg-primary-container/15 border border-primary-container/30 text-on-surface rounded-br-none"
+                        : "bg-surface-container-high border border-border-tech text-on-surface-variant rounded-bl-none"
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                  <span className="font-label-caps text-[9px] text-on-surface-variant/60 mt-1 px-1">
+                    {msg.timestamp} {msg.isVoice ? "• Voice Input" : ""}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="w-1/6 bg-border-tech h-[50%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-on-surface-variant opacity-0 group-hover:opacity-100">SLM</div>
-            </div>
-            <div className="w-1/6 bg-primary-container/20 border-t border-primary-container h-[80%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-primary-container opacity-0 group-hover:opacity-100">LLM</div>
-            </div>
-            <div className="w-1/6 bg-border-tech h-[40%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-on-surface-variant opacity-0 group-hover:opacity-100">SLM</div>
-            </div>
-            <div className="w-1/6 bg-primary-container/20 border-t border-primary-container h-[90%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-primary-container opacity-0 group-hover:opacity-100">LLM</div>
-            </div>
-            <div className="w-1/6 bg-border-tech h-[60%] relative group">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 text-[8px] text-on-surface-variant opacity-0 group-hover:opacity-100">SLM</div>
-            </div>
-            {/* Trend line */}
-            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M0,80 L20,60 L40,30 L60,70 L80,20 L100,50" fill="none" stroke="#00FF41" strokeWidth="1" />
-            </svg>
-          </div>
-          <div className="flex justify-between mt-2 font-code-sm text-[10px] text-on-surface-variant">
-            <span>Throughput: 1.2k req/s</span>
-            <span>Routing: 70% SLM / 30% LLM</span>
+
+            {/* Input Bar */}
+            <form onSubmit={handleSendMessage} className="flex gap-2 mt-3 pt-2 border-t border-border-tech">
+              <input
+                type="text"
+                value={voiceText}
+                onChange={(e) => setVoiceText(e.target.value)}
+                placeholder="Type or click mic to speak..."
+                className="flex-1 bg-surface-container-lowest border border-border-tech rounded px-3 py-1.5 font-code-sm text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary-container"
+              />
+              <button
+                type="submit"
+                className="p-2 bg-primary-container text-on-primary rounded hover:bg-primary-fixed transition-colors"
+              >
+                <Send size={14} />
+              </button>
+            </form>
           </div>
         </div>
       </div>

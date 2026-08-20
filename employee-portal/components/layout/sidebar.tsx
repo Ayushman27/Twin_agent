@@ -4,19 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { label: "Dashboard",     href: "/dashboard",           icon: "dashboard" },
-  { label: "Agent Logs",    href: "/agents/activity",     icon: "terminal" },
-  { label: "Agent Network", href: "/agents/network",      icon: "account_tree" },
-  { label: "Twins",         href: "/twins/human",         icon: "manage_accounts" },
+  { label: "Home",          href: "/dashboard",           icon: "home" },
   { label: "Tasks",         href: "/tasks",               icon: "checklist" },
   { label: "Approvals",     href: "/approvals",           icon: "verified_user" },
+  { label: "Twins",         href: "/twins/human",         icon: "manage_accounts" },
+  { label: "Agent Network", href: "/agents/network",      icon: "account_tree" },
+  { label: "Agent Logs",    href: "/agents/activity",     icon: "terminal" },
   { label: "Knowledge",     href: "/knowledge",           icon: "database" },
   { label: "Integrations",  href: "/integrations",        icon: "cable" },
   { label: "Analytics",     href: "/analytics",           icon: "bar_chart" },
 ];
 
 const BOTTOM_NAV = [
-  { label: "Settings",      href: "/settings", icon: "settings" },
+  { label: "Settings",      href: "/settings",            icon: "settings" },
 ];
 
 export function Sidebar() {
@@ -47,7 +47,7 @@ export function Sidebar() {
               href={href}
               className={`flex items-center gap-3 px-3 py-2 transition-colors duration-200 cursor-pointer active:scale-95 border-l-2 ${
                 active
-                  ? "border-primary-container text-primary-fixed-dim bg-surface-container-low"
+                  ? "border-primary-container text-primary-fixed-dim bg-surface-container-low font-semibold"
                   : "border-transparent text-on-surface-variant hover:bg-surface-container-high"
               }`}
             >

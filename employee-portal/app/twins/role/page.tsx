@@ -1,16 +1,13 @@
-import { PageStub } from "@shared/components/layout/page-stub";
+"use client";
+
+import { TwinTabs } from "@/components/twins/TwinTabs";
+import { RoleAgentView } from "@/components/twins/RoleAgentView";
 
 export default function RoleTwinPage() {
   return (
-    <PageStub
-      title="Role Twin"
-      description="Operational responsibilities, standard operating procedures, and automated execution policies."
-      bullets={[
-        "Assigned organizational responsibilities",
-        "Quality standards and testing thresholds",
-        "Connected knowledge sources and domain documentation",
-        "Expected behavior guidelines for autonomous sub-agents",
-      ]}
-    />
+    <div className="flex flex-col gap-2">
+      <TwinTabs activeTab="role" />
+      <RoleAgentView />
+    </div>
   );
 }
