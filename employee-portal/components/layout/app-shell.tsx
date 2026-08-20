@@ -7,9 +7,12 @@ import { CommandPalette } from "@shared/components/command-palette/command-palet
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthRoute = pathname?.startsWith("/login");
+  const isPublicRoute =
+    pathname === "/" ||
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/register");
 
-  if (isAuthRoute) return <>{children}</>;
+  if (isPublicRoute) return <>{children}</>;
 
   return (
     <div className="h-screen overflow-hidden">

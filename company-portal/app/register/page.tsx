@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authService, CompanyRegisterPayload } from "@shared/services/auth.service";
@@ -18,6 +18,7 @@ import {
   Phone,
   MapPin,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 
 const INDUSTRY_OPTIONS = [
@@ -42,20 +43,29 @@ const SIZE_OPTIONS = [
   "1000+",
 ];
 
+const SIZE_RANGES: Record<string, { min: number; max: number; label: string }> = {
+  "1-10": { min: 1, max: 10, label: "1 to 10" },
+  "11-50": { min: 11, max: 50, label: "11 to 50" },
+  "51-200": { min: 51, max: 200, label: "51 to 200" },
+  "201-500": { min: 201, max: 500, label: "201 to 500" },
+  "501-1000": { min: 501, max: 1000, label: "501 to 1000" },
+  "1000+": { min: 1000, max: 1000000, label: "at least 1000" },
+};
+
 function RegisterForm() {
   const router = useRouter();
 
-  // Company Information state
+  // Company Information state (All initialized empty as requested)
   const [companyName, setCompanyName] = useState("");
   const [companyEmail, setCompanyEmail] = useState("");
   const [industry, setIndustry] = useState("Technology");
   const [companySize, setCompanySize] = useState("51-200");
-  const [employeeCount, setEmployeeCount] = useState<number | "">(50);
+  const [employeeCount, setEmployeeCount] = useState<number | "">("");
   const [companyPhone, setCompanyPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
-  const [businessModel, setBusinessModel] = useState("B2B SaaS");
+  const [businessModel, setBusinessModel] = useState("");
   const [description, setDescription] = useState("");
 
   // Administrator Information state
@@ -71,11 +81,27 @@ function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Live Company Size & Employee Count mismatch check
+  const sizeValidation = useMemo(() => {
+    if (employeeCount === "") return { isValid: true, message: null };
+    const range = SIZE_RANGES[companySize];
+    if (!range) return { isValid: true, message: null };
+
+    const count = Number(employeeCount);
+    if (count < range.min || count > range.max) {
+      return {
+        isValid: false,
+        message: `Employee count (${count}) does not match the selected company size (${companySize}). Expected ${range.label} employees.`,
+      };
+    }
+    return { isValid: true, message: null };
+  }, [companySize, employeeCount]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    // Client validation checks
+    // Strict validation for ALL mandatory fields
     if (!companyName.trim()) {
       setErrorMessage("Company Name is required.");
       return;
@@ -84,8 +110,36 @@ function RegisterForm() {
       setErrorMessage("Company Email is required.");
       return;
     }
-    if (typeof employeeCount !== "number" || employeeCount <= 0) {
-      setErrorMessage("Employee Count must be a positive integer.");
+    if (employeeCount === "" || typeof employeeCount !== "number" || employeeCount <= 0) {
+      setErrorMessage("Employee Count is required and must be a positive number.");
+      return;
+    }
+    if (!sizeValidation.isValid && sizeValidation.message) {
+      setErrorMessage(sizeValidation.message);
+      return;
+    }
+    if (!companyPhone.trim()) {
+      setErrorMessage("Company Phone is required.");
+      return;
+    }
+    if (!website.trim()) {
+      setErrorMessage("Company Website URL is required.");
+      return;
+    }
+    if (!country.trim()) {
+      setErrorMessage("Country is required.");
+      return;
+    }
+    if (!city.trim()) {
+      setErrorMessage("City / Location is required.");
+      return;
+    }
+    if (!businessModel.trim()) {
+      setErrorMessage("Business Model is required.");
+      return;
+    }
+    if (!description.trim()) {
+      setErrorMessage("Company Description is required.");
       return;
     }
     if (!adminName.trim()) {
@@ -93,7 +147,11 @@ function RegisterForm() {
       return;
     }
     if (!adminEmail.trim()) {
-      setErrorMessage("Administrator Email is required.");
+      setErrorMessage("Administrator Work Email is required.");
+      return;
+    }
+    if (!adminPhone.trim()) {
+      setErrorMessage("Administrator Direct Phone is required.");
       return;
     }
     if (adminPassword.length < 8) {
@@ -121,15 +179,15 @@ function RegisterForm() {
       industry,
       company_size: companySize,
       employee_count: Number(employeeCount),
-      company_phone: companyPhone.trim() || undefined,
-      website: website.trim() || undefined,
-      country: country.trim() || undefined,
-      city: city.trim() || undefined,
-      business_model: businessModel.trim() || undefined,
-      description: description.trim() || undefined,
+      company_phone: companyPhone.trim(),
+      website: website.trim(),
+      country: country.trim(),
+      city: city.trim(),
+      business_model: businessModel.trim(),
+      description: description.trim(),
       admin_name: adminName.trim(),
       admin_email: adminEmail.trim(),
-      admin_phone: adminPhone.trim() || undefined,
+      admin_phone: adminPhone.trim(),
       admin_password: adminPassword,
       confirm_password: confirmPassword,
     };
@@ -159,31 +217,21 @@ function RegisterForm() {
           </h1>
           <span className="px-2.5 py-1 border border-primary-container/30 bg-primary-container/10 text-primary-container font-code-sm text-xs uppercase flex items-center gap-1.5 rounded-sm">
             <Building2 size={13} />
-            New Tenant
+            Company Portal
           </span>
         </div>
-        <p className="font-code-sm text-xs text-on-surface-variant leading-relaxed">
-          Create your organization&apos;s AI Twin platform account. This will provision your company workspace and configure your primary Organization Administrator profile.
+        <p className="font-sans text-sm text-on-surface-variant leading-relaxed">
+          Create your corporate tenant, onboard your primary administrator, and establish your digital twin command center.
         </p>
       </div>
 
       {/* Error Alert */}
       {errorMessage && (
-        <div className="mb-6 p-4 bg-error-container/20 border border-error-container/60 rounded-sm flex items-start gap-3 text-on-surface animate-fade-in-up">
-          <ShieldAlert className="w-5 h-5 text-error shrink-0 mt-0.5" />
-          <div className="text-xs font-code-sm text-error leading-relaxed">
-            <div className="font-bold mb-1">Registration Error</div>
+        <div className="mb-6 p-4 border border-error bg-error-container/20 text-on-error-container flex items-start gap-3 rounded-sm animate-fade-in">
+          <ShieldAlert size={18} className="text-error shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs font-code-sm leading-relaxed">
+            <span className="font-bold block mb-0.5">Registration Failed</span>
             {errorMessage}
-            {errorMessage.toLowerCase().includes("already registered") && (
-              <div className="mt-2">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-1 text-[11px] text-primary-container hover:underline font-bold"
-                >
-                  Log in with existing administrator account <ArrowRight size={12} />
-                </Link>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -283,16 +331,28 @@ function RegisterForm() {
                   required
                   value={employeeCount}
                   onChange={(e) => setEmployeeCount(e.target.value === "" ? "" : parseInt(e.target.value))}
-                  placeholder="50"
-                  className="w-full bg-surface-container-low border border-border-tech px-3 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
+                  placeholder="e.g. 120"
+                  className={`w-full bg-surface-container-low border px-3 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:outline-none transition-colors ${
+                    !sizeValidation.isValid && employeeCount !== ""
+                      ? "border-red-500 bg-red-950/20 text-red-200 focus:border-red-400"
+                      : "border-border-tech focus:border-primary-container"
+                  }`}
                 />
               </div>
             </div>
 
+            {/* Live Size Range Warning */}
+            {!sizeValidation.isValid && sizeValidation.message && (
+              <div className="sm:col-span-2 p-2.5 border border-red-500/50 bg-red-950/30 text-red-300 text-xs font-code-sm flex items-center gap-2 rounded-sm animate-fade-in">
+                <AlertTriangle size={15} className="text-red-400 shrink-0" />
+                <span>{sizeValidation.message}</span>
+              </div>
+            )}
+
             {/* Company Phone */}
             <div>
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Company Phone (Optional)
+                Company Phone <span className="text-primary-container">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
@@ -300,6 +360,7 @@ function RegisterForm() {
                 </div>
                 <input
                   type="tel"
+                  required
                   value={companyPhone}
                   onChange={(e) => setCompanyPhone(e.target.value)}
                   placeholder="+1 (555) 000-0000"
@@ -311,7 +372,7 @@ function RegisterForm() {
             {/* Website */}
             <div>
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Website (Optional)
+                Website <span className="text-primary-container">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
@@ -319,6 +380,7 @@ function RegisterForm() {
                 </div>
                 <input
                   type="url"
+                  required
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
                   placeholder="https://acme.ai"
@@ -330,7 +392,7 @@ function RegisterForm() {
             {/* Country & City */}
             <div>
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Country (Optional)
+                Country <span className="text-primary-container">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
@@ -338,6 +400,7 @@ function RegisterForm() {
                 </div>
                 <input
                   type="text"
+                  required
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
                   placeholder="United States"
@@ -348,10 +411,11 @@ function RegisterForm() {
 
             <div>
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                City / Location (Optional)
+                City / Location <span className="text-primary-container">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="San Francisco, CA"
@@ -362,13 +426,14 @@ function RegisterForm() {
             {/* Business Model */}
             <div className="sm:col-span-2">
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Business Model (Optional)
+                Business Model <span className="text-primary-container">*</span>
               </label>
               <input
                 type="text"
+                required
                 value={businessModel}
                 onChange={(e) => setBusinessModel(e.target.value)}
-                placeholder="e.g. B2B Enterprise SaaS, AI Services"
+                placeholder="e.g. B2B Enterprise SaaS, AI Services, FinTech"
                 className="w-full bg-surface-container-low border border-border-tech px-3 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
               />
             </div>
@@ -376,10 +441,11 @@ function RegisterForm() {
             {/* Description */}
             <div className="sm:col-span-2">
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Company Description (Optional)
+                Company Description <span className="text-primary-container">*</span>
               </label>
               <textarea
                 rows={2}
+                required
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Briefly describe your company's core mission and workflow domains..."
@@ -437,7 +503,7 @@ function RegisterForm() {
             {/* Admin Phone */}
             <div className="sm:col-span-2">
               <label className="block font-label-caps text-xs text-on-surface-variant mb-1.5 uppercase">
-                Admin Direct Phone (Optional)
+                Admin Direct Phone <span className="text-primary-container">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-on-surface-variant">
@@ -445,6 +511,7 @@ function RegisterForm() {
                 </div>
                 <input
                   type="tel"
+                  required
                   value={adminPhone}
                   onChange={(e) => setAdminPhone(e.target.value)}
                   placeholder="+1 (555) 012-3456"
@@ -467,7 +534,7 @@ function RegisterForm() {
                   required
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Min 8 chars (1 uppercase, 1 digit)"
                   className="w-full bg-surface-container-low border border-border-tech pl-9 pr-10 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
                 />
                 <button
@@ -478,9 +545,6 @@ function RegisterForm() {
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              <p className="font-code-sm text-[10px] text-on-surface-variant mt-1">
-                Min 8 characters, with 1 uppercase letter and 1 digit.
-              </p>
             </div>
 
             {/* Confirm Password */}
@@ -497,7 +561,7 @@ function RegisterForm() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Repeat your password"
                   className="w-full bg-surface-container-low border border-border-tech pl-9 pr-10 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
                 />
                 <button
@@ -508,68 +572,78 @@ function RegisterForm() {
                   {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {confirmPassword && confirmPassword !== adminPassword && (
-                <p className="font-code-sm text-[10px] text-error mt-1">
-                  Passwords do not match
-                </p>
-              )}
             </div>
           </div>
         </div>
 
-        {/* ── SUBMIT BUTTON & FOOTER ── */}
+        {/* Submit CTA */}
         <div className="pt-4 border-t border-border-tech">
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full py-3.5 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group text-sm"
+            disabled={isLoading || (!sizeValidation.isValid && employeeCount !== "")}
+            className="btn-primary w-full py-3.5 flex items-center justify-center gap-2 font-label-caps text-xs tracking-wider uppercase disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {isLoading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                <span>PROVISIONING ORGANIZATION &amp; ADMIN ACCOUNT...</span>
-              </>
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-surface border-t-transparent rounded-full animate-spin" />
+                Registering Organization...
+              </span>
             ) : (
               <>
-                <span>REGISTER &amp; INITIALIZE ORGANIZATION</span>
-                <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                <span>Complete Company Registration</span>
+                <ArrowRight size={15} />
               </>
             )}
           </button>
+        </div>
 
-          <div className="mt-4 text-center">
-            <p className="font-code-sm text-xs text-on-surface-variant">
-              Already registered?{" "}
-              <Link href="/login" className="text-primary-container hover:underline font-bold">
-                Log in to existing company account →
-              </Link>
-            </p>
-          </div>
+        {/* Footer Switcher */}
+        <div className="text-center pt-2">
+          <p className="font-sans text-xs text-on-surface-variant">
+            Already registered your company?{" "}
+            <Link
+              href="/login"
+              className="text-primary-container hover:underline font-code-sm font-semibold transition-colors"
+            >
+              Sign In to Company Portal →
+            </Link>
+          </p>
         </div>
       </form>
     </div>
   );
 }
 
-export default function RegisterPage() {
+export default function CompanyRegisterPage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-base-layer relative px-4 py-12 overflow-x-hidden">
-      {/* Background grid overlay */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none fixed" />
+    <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background accents */}
+      <div className="absolute inset-0 bg-[radial-gradient(#00ff41_1px,transparent_1px)] [background-size:24px_24px] opacity-10 pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-container/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Header Badge */}
-      <div className="z-10 mb-2 flex items-center gap-3">
-        <span className="w-2 h-2 rounded-full bg-primary-container pulse-green" />
-        <span className="font-label-caps text-xs text-primary-container tracking-widest uppercase">
-          TWIN AGENT // COMPANY ONBOARDING (PORT 3000)
-        </span>
-        <span className="text-border-tech">|</span>
-        <span className="font-code-sm text-[11px] text-on-surface-variant">
-          TENANT PROVISIONING
-        </span>
+      {/* Top Brand Bar */}
+      <div className="relative z-10 w-full max-w-3xl mb-4 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2 text-on-surface hover:text-primary-container transition-colors">
+          <div className="w-7 h-7 bg-primary-container flex items-center justify-center text-surface font-bold text-sm">
+            T
+          </div>
+          <span className="font-mono text-sm tracking-wider font-bold">TWIN AGENT // COMPANY</span>
+        </Link>
+        <Link
+          href="/login"
+          className="font-code-sm text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+        >
+          Existing Organization? <span className="text-primary-container">Login</span>
+        </Link>
       </div>
 
-      <Suspense fallback={<div className="font-code-sm text-xs text-on-surface-variant">Loading registration form...</div>}>
+      <Suspense
+        fallback={
+          <div className="w-full max-w-3xl glass-panel p-10 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
         <RegisterForm />
       </Suspense>
     </div>

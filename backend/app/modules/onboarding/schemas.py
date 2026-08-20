@@ -14,18 +14,18 @@ class CompanyRegisterRequest(BaseModel):
     industry:        str            = Field(..., min_length=2, max_length=100, description="Industry domain")
     company_size:    str            = Field(..., min_length=1, max_length=50,  description="Company size tier, e.g., 51-200")
     employee_count:  int            = Field(..., ge=1, description="Total employee count (positive integer)")
-    company_phone:   Optional[str]  = Field(None, max_length=30)
-    website:         Optional[str]  = Field(None, max_length=500)
-    country:         Optional[str]  = Field(None, max_length=100)
-    city:            Optional[str]  = Field(None, max_length=100)
-    business_model:  Optional[str]  = Field(None, max_length=100)
-    description:     Optional[str]  = None
+    company_phone:   Optional[str]  = Field(None, max_length=30,  description="Official company telephone")
+    website:         Optional[str]  = Field(None, max_length=500, description="Company website URL")
+    country:         Optional[str]  = Field(None, max_length=100, description="Country of operation")
+    city:            Optional[str]  = Field(None, max_length=100, description="City / headquarters location")
+    business_model:  Optional[str]  = Field(None, max_length=100, description="Business model")
+    description:     Optional[str]  = Field(None, max_length=5000, description="Company description")
     primary_contact: Optional[str]  = Field(None, max_length=255)
 
     # ── Organization Administrator ───────────────────────────
     admin_name:      str            = Field(..., min_length=2, max_length=255, description="Administrator full name")
     admin_email:     EmailStr       = Field(..., description="Administrator personal work email")
-    admin_phone:     Optional[str]  = Field(None, max_length=30)
+    admin_phone:     Optional[str]  = Field(None, max_length=30,  description="Admin direct phone")
     admin_password:  str            = Field(..., min_length=8, max_length=128, description="Strong password")
     confirm_password: Optional[str] = Field(None, min_length=8, max_length=128)
 
@@ -39,9 +39,30 @@ class CompanyRegisterRequest(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_password_match(self) -> "CompanyRegisterRequest":
+    def validate_form(self) -> "CompanyRegisterRequest":
         if self.confirm_password and self.admin_password != self.confirm_password:
             raise ValueError("Passwords do not match")
+
+        # Validate employee count matches company size tier
+        if self.company_size and self.employee_count is not None:
+            size_ranges = {
+                "1-10": (1, 10),
+                "11-50": (11, 50),
+                "51-200": (51, 200),
+                "201-500": (201, 500),
+                "501-1000": (501, 1000),
+            }
+            if self.company_size in size_ranges:
+                low, high = size_ranges[self.company_size]
+                if not (low <= self.employee_count <= high):
+                    raise ValueError(
+                        f"Employee count ({self.employee_count}) does not match the selected company size range ({self.company_size}). Expected between {low} and {high}."
+                    )
+            elif self.company_size == "1000+" and self.employee_count < 1000:
+                raise ValueError(
+                    f"Employee count ({self.employee_count}) does not match the selected company size range (1000+). Expected at least 1000."
+                )
+
         return self
 
 
