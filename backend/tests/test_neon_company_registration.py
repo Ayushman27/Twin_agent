@@ -80,7 +80,7 @@ async def test_company_registration_duplicate_company_email(client: AsyncClient)
         "company_email": "contact@company.ai",  # Already registered in seed
         "industry": "Technology",
         "company_size": "51-200",
-        "employee_count": 50,
+        "employee_count": 80,
         "admin_name": "Admin New",
         "admin_email": "admin_new_123@uniquealpha.com",
         "admin_password": "SecurePassword1",
@@ -99,7 +99,7 @@ async def test_company_registration_duplicate_company_name(client: AsyncClient):
         "company_email": "new_email_unique@company.ai",
         "industry": "Technology",
         "company_size": "51-200",
-        "employee_count": 50,
+        "employee_count": 80,
         "admin_name": "Admin New",
         "admin_email": "admin_new_456@uniquealpha.com",
         "admin_password": "SecurePassword1",
@@ -118,7 +118,7 @@ async def test_company_registration_duplicate_admin_email(client: AsyncClient):
         "company_email": "enterprise@brandnew.com",
         "industry": "Technology",
         "company_size": "51-200",
-        "employee_count": 50,
+        "employee_count": 80,
         "admin_name": "Existing Asha",
         "admin_email": "admin@company.ai",  # Already in users table
         "admin_password": "SecurePassword1",
@@ -130,9 +130,28 @@ async def test_company_registration_duplicate_admin_email(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_company_registration_size_count_mismatch(client: AsyncClient):
+    """Test: Size range mismatch (51-200 with count 50) is rejected with 422."""
+    payload = {
+        "company_name": "Mismatch Size Corp",
+        "company_email": "mismatch@sizecorp.com",
+        "industry": "Technology",
+        "company_size": "51-200",
+        "employee_count": 50,  # Below 51!
+        "admin_name": "Admin Mismatch",
+        "admin_email": "admin@sizecorp.com",
+        "admin_password": "SecurePassword1",
+        "confirm_password": "SecurePassword1",
+    }
+    res = await client.post("/api/v1/onboarding/company/register", json=payload)
+    assert res.status_code == 422
+    assert "does not match the selected company size range" in str(res.json())
+
+
+@pytest.mark.asyncio
 async def test_company_registration_invalid_data(client: AsyncClient):
     """Test 5: Invalid payload (employee count <= 0 or weak password) fails validation."""
-    # Invalid employee count
+    # Invalid employee count <= 0
     bad_count = {
         "company_name": "Invalid Org",
         "company_email": "invalid@org.com",
@@ -152,8 +171,8 @@ async def test_company_registration_invalid_data(client: AsyncClient):
         "company_name": "Mismatch Org",
         "company_email": "mismatch@org.com",
         "industry": "Technology",
-        "company_size": "51-200",
-        "employee_count": 10,
+        "company_size": "1-10",
+        "employee_count": 5,
         "admin_name": "Admin",
         "admin_email": "admin@mismatch.com",
         "admin_password": "SecurePassword1",

@@ -88,7 +88,7 @@ export default function CompanyDashboardPage() {
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -120,17 +120,6 @@ export default function CompanyDashboardPage() {
           </CardHeader>
           <CardTitle>14</CardTitle>
           <CardContent className="text-xs text-primary-container mt-1">100% Role Twin Aligned</CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <span className="font-label-caps text-label-caps text-on-surface-variant">Database Link</span>
-              <CheckCircle2 size={14} className="text-primary-container" />
-            </div>
-          </CardHeader>
-          <CardTitle className="text-primary-container">CONNECTED</CardTitle>
-          <CardContent className="text-xs text-on-surface-variant mt-1">FastAPI Backend (8000)</CardContent>
         </Card>
       </div>
 
