@@ -24,14 +24,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const token = getStoredToken();
 
-  const res = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+    });
+  } catch (netErr: any) {
+    throw new Error(
+      netErr?.message === "Failed to fetch"
+        ? `Unable to connect to backend API server at ${config.apiUrl}. Please ensure FastAPI is running on http://localhost:8000.`
+        : (netErr?.message || "Network request failed")
+    );
+  }
 
   if (!res.ok) {
     let errorMsg = `API error ${res.status}: ${res.statusText}`;

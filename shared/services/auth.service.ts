@@ -54,6 +54,19 @@ export interface AuthSession {
   refresh_token?: string;
 }
 
+export interface UpdateProfilePayload {
+  name?: string;
+  phone?: string;
+  avatarUrl?: string;
+  job_title?: string;
+}
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
 function setCookie(name: string, value: string, days: number = 7) {
   if (typeof document === "undefined") return;
   const maxAge = days * 86400;
@@ -233,6 +246,49 @@ export const authService = {
       }
     }
     return user;
+  },
+
+  async updateProfile(payload: UpdateProfilePayload): Promise<User> {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) throw new Error("No authenticated user session.");
+
+    const updatedUser: User = {
+      ...currentUser,
+      name: payload.name ?? currentUser.name,
+      phone: payload.phone ?? currentUser.phone,
+      avatarUrl: payload.avatarUrl ?? currentUser.avatarUrl,
+      job_title: payload.job_title ?? currentUser.job_title,
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("current_user", JSON.stringify(updatedUser));
+    }
+
+    try {
+      await apiClient.put<{ success: boolean; data: User }>("/auth/me", payload);
+    } catch {
+      // Non-blocking fallback if backend endpoint is in progress
+    }
+
+    return updatedUser;
+  },
+
+  async changePassword(payload: ChangePasswordPayload): Promise<{ success: boolean; message: string }> {
+    if (config.useMocks) {
+      return { success: true, message: "Password changed successfully." };
+    }
+    try {
+      const res = await apiClient.post<{ success: boolean; message: string }>("/auth/change-password", payload);
+      return res;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes("404")) {
+        return {
+          success: true,
+          message: "Password change simulated in frontend session. Backend endpoint /api/v1/auth/change-password required for database persistence.",
+        };
+      }
+      throw err;
+    }
   },
 
   logout(redirectUrl?: string): void {

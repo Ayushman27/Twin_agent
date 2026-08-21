@@ -26,11 +26,18 @@ class CapabilityRegistry:
         return result.scalars().first()
 
     async def get_capabilities_by_names(self, names: List[str]) -> List[AgentCapability]:
-        """Fetch a list of capabilities by their names."""
+        """Fetch a list of capabilities by their names (one unique capability per requested name)."""
         result = await self.db.execute(
-            select(AgentCapability).where(AgentCapability.name.in_(names), AgentCapability.enabled == True)
+            select(AgentCapability)
+            .where(AgentCapability.name.in_(names), AgentCapability.enabled == True)
+            .order_by(AgentCapability.created_at.desc())
         )
-        return list(result.scalars().all())
+        all_caps = list(result.scalars().all())
+        unique_by_name: dict = {}
+        for cap in all_caps:
+            if cap.name not in unique_by_name:
+                unique_by_name[cap.name] = cap
+        return list(unique_by_name.values())
         
     async def get_all_capabilities(self) -> List[AgentCapability]:
         """List all active capabilities."""
@@ -46,3 +53,22 @@ class CapabilityRegistry:
         await self.db.commit()
         await self.db.refresh(capability)
         return capability
+
+    async def get_by_id_or_name(self, identifier: str) -> Optional[AgentCapability]:
+        """Fetch a capability by ID or name (whether enabled or disabled)."""
+        result = await self.db.execute(
+            select(AgentCapability).where(
+                (AgentCapability.id == identifier) | (AgentCapability.name == identifier)
+            )
+        )
+        return result.scalars().first()
+
+    async def get_active_by_id_or_name(self, identifier: str) -> Optional[AgentCapability]:
+        """Fetch an active enabled capability by ID or name."""
+        result = await self.db.execute(
+            select(AgentCapability).where(
+                ((AgentCapability.id == identifier) | (AgentCapability.name == identifier)),
+                AgentCapability.enabled == True,
+            )
+        )
+        return result.scalars().first()

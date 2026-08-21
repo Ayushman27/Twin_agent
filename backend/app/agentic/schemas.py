@@ -65,7 +65,7 @@ class AgentResponse(AgentBase):
     capability_id: str
     created_at: datetime
     updated_at: datetime
-    capability: AgentCapabilityResponse
+    capability: Optional[AgentCapabilityResponse] = None
 
 
 class AgentGroupBase(ConfigBase):

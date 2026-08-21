@@ -4,10 +4,11 @@ Agent Group Endpoints
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
 
 from app.db.session import get_db
-from app.agentic.models import AgentGroup
+from app.agentic.models import AgentGroup, Agent
 from app.agentic.schemas import AgentGroupResponse
 from app.agentic.planner.agent_planner import AgentPlanner
 from app.agentic.factory.agent_factory import AgentFactory
@@ -20,7 +21,6 @@ router = APIRouter()
 async def generate_agent_group(
     org_id: str,
     emp_id: str,
-    # In reality, human_twin and role_twin would be fetched from the DB using emp_id
     payload: Dict[str, Any], 
     db: AsyncSession = Depends(get_db)
 ):
@@ -48,7 +48,13 @@ async def generate_agent_group(
         role_twin=role_twin
     )
     
-    return group
+    # Eager reload
+    res = await db.execute(
+        select(AgentGroup)
+        .options(selectinload(AgentGroup.agents).selectinload(Agent.capability))
+        .where(AgentGroup.id == group.id)
+    )
+    return res.scalar_one()
 
 
 @router.get("/employees/{emp_id}/agent-group", response_model=AgentGroupResponse)
@@ -58,7 +64,10 @@ async def get_agent_group(
 ):
     """Fetch the active agent group for an employee."""
     result = await db.execute(
-        select(AgentGroup).where(AgentGroup.employee_id == emp_id, AgentGroup.status == "ACTIVE")
+        select(AgentGroup)
+        .options(selectinload(AgentGroup.agents).selectinload(Agent.capability))
+        .where(AgentGroup.employee_id == emp_id, AgentGroup.status == "ACTIVE")
+        .order_by(AgentGroup.created_at.desc())
     )
     group = result.scalars().first()
     if not group:

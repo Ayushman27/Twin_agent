@@ -28,3 +28,10 @@ async def create_capability(
     """Register a new capability."""
     registry = CapabilityRegistry(db)
     return await registry.register_capability(payload.model_dump())
+
+
+@router.get("/agent-tools")
+async def list_agent_tools():
+    """List all recognized organizational tools from the ToolRegistry."""
+    from app.agentic.registry.tool_registry import ToolRegistry
+    return ToolRegistry.get_all_tools()

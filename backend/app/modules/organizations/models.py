@@ -9,6 +9,7 @@ from app.db.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.modules.auth.models import User
+    from app.modules.roles.models import Role
 
 
 class OrgStatus(str, enum.Enum):
@@ -45,6 +46,9 @@ class Organization(UUIDMixin, TimestampMixin, Base):
 
     members: Mapped[list["OrganizationMember"]] = relationship(
         "OrganizationMember", back_populates="organization", lazy="select"
+    )
+    roles: Mapped[list["Role"]] = relationship(
+        "Role", back_populates="organization", lazy="select", cascade="all, delete-orphan"
     )
 
 

@@ -26,6 +26,8 @@ async def test_engine():
     from app.modules.applications.models import Application  # noqa: F401
     from app.modules.documents.models import ApplicationDocument  # noqa: F401
     from app.modules.desktop.models import DesktopRelease  # noqa: F401
+    from app.modules.roles.models import Role, RoleCapability, EmployeeRoleAssignment  # noqa: F401
+    from app.agentic.models import AgentCapability  # noqa: F401
     engine = create_async_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
