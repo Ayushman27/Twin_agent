@@ -64,12 +64,34 @@ class OrganizationService:
         total = await self.repo.count_members(org_id)
         pending = await self.repo.count_pending_invitations(org_id)
         active = await self.repo.count_active_members(org_id)
+
+        # Query live count of active teams and roles in this organization
+        from app.modules.roles.models import Role, RoleStatus
+        from app.modules.teams.models import Team, TeamStatus
+        from sqlalchemy import func
+
+        teams_res = await self.db.execute(
+            select(func.count(Team.id)).where(
+                Team.organization_id == org_id,
+                Team.status != TeamStatus.ARCHIVED,
+            )
+        )
+        live_teams_count = teams_res.scalar() or 0
+
+        roles_res = await self.db.execute(
+            select(func.count(Role.id)).where(
+                Role.organization_id == org_id,
+                Role.status == RoleStatus.ACTIVE,
+            )
+        )
+        live_roles_count = roles_res.scalar() or 0
+
         return OrganizationStatsResponse(
             total_members=total,
             active_members=active,
             pending_invitations=pending,
-            teams_count=6,
-            roles_count=14,
+            teams_count=live_teams_count,
+            roles_count=live_roles_count,
         )
 
     async def get_detailed_members(

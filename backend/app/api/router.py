@@ -5,6 +5,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.onboarding.router import router as onboarding_router
 from app.modules.organizations.router import router as org_router
 from app.modules.roles.router import router as roles_router
+from app.modules.teams.router import router as teams_router
 from app.modules.applications.router import router as app_router
 from app.modules.documents.router import router as doc_router
 from app.modules.desktop.router import router as desktop_router
@@ -20,6 +21,7 @@ api_router.include_router(auth_router,       prefix="/auth",          tags=["Aut
 api_router.include_router(onboarding_router, prefix="/onboarding",    tags=["Onboarding"])
 api_router.include_router(org_router,        prefix="/organizations", tags=["Organizations"])
 api_router.include_router(roles_router,      prefix="",               tags=["Roles"])
+api_router.include_router(teams_router,      prefix="",               tags=["Teams"])
 api_router.include_router(app_router,        prefix="/applications",  tags=["Applications"])
 api_router.include_router(doc_router,        prefix="",               tags=["Documents"])
 api_router.include_router(desktop_router,    prefix="/desktop",       tags=["Desktop"])
