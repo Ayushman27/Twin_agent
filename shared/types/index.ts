@@ -9,3 +9,5 @@ export * from "./integration";
 export * from "./analytics";
 export * from "./audit";
 export * from "./role";
+export * from "./team";
+export * from "./project";

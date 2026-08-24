@@ -26,16 +26,6 @@ export interface Employee {
   agentStatus: "idle" | "running" | "error";
 }
 
-export interface Team {
-  id: string;
-  name: string;
-  managerId: string;
-  memberIds: string[];
-  projectIds: string[];
-  workloadPercent: number;
-  performanceScore: number;
-}
-
 export interface JobRole {
   id: string;
   name: string;
@@ -45,17 +35,4 @@ export interface JobRole {
   knowledgeSourceIds: string[];
   assignedEmployeeIds: string[];
   roleTwinStatus: "active" | "incomplete";
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  managerId: string;
-  teamId: string;
-  progressPercent: number;
-  taskIds: string[];
-  risks: string[];
-  dependencies: string[];
-  githubRepo?: string;
-  jiraProjectKey?: string;
 }
