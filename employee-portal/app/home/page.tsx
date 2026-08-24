@@ -219,12 +219,13 @@ export default function HomePage() {
 
   // AI Voice Output Interface State
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [micReady, setMicReady] = useState(false);
   const [voiceText, setVoiceText] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "msg-1",
       sender: "ai",
-      text: "Hello Rohan! I am your AI Twin Voice Assistant powered by Gemini Live. I actively monitor your tasks and broadcast real-time voice updates.",
+      text: "Hello! I am Echo, your AI Twin Voice Assistant. Say 'Echo' followed by your question to talk to me.",
       timestamp: "10:40 AM",
     },
   ]);
@@ -251,27 +252,11 @@ export default function HomePage() {
   });
 
   useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated) {
-        router.push("/login?error=unauthorized");
-      } else if (!isEmployee) {
-        router.push("/login?error=admin_restricted");
-      } else if (!hasOrganization) {
-        router.push("/login?error=no_organization");
-      } else {
-        const handleStart = () => {
-          geminiLive.startListening();
-        };
-
-        // Start listening immediately & listen for first user interaction if suspended by browser
-        handleStart();
-        window.addEventListener("click", handleStart, { once: true });
-        return () => {
-          window.removeEventListener("click", handleStart);
-        };
-      }
+    // Badge auto-shows once authenticated; mic starts on first click
+    if (!isLoading && isAuthenticated && isEmployee && hasOrganization) {
+      // nothing — mic starts via button click below
     }
-  }, [isLoading, isAuthenticated, isEmployee, hasOrganization, router]);
+  }, [isLoading, isAuthenticated, isEmployee, hasOrganization]);
 
   if (isLoading) {
     return <LoadingState label="Authenticating Digital Twin workspace..." />;
@@ -538,26 +523,45 @@ export default function HomePage() {
                 <Sparkles size={18} />
               </div>
               <div>
-                <h3 className="font-label-caps text-xs font-bold text-on-surface">Voice Assistant</h3>
+                <h3 className="font-label-caps text-xs font-bold text-on-surface">Echo — Voice Agent</h3>
                 <span className="font-code-sm text-[10px] text-primary-container flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                  Gemini Live • Always-On Mic
+                  Say "Echo" to activate
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => geminiLive.startListening()}
-                title="Enable / Start Microphone"
-                className={`font-code-sm text-[10px] px-2.5 py-1 rounded border transition-colors flex items-center gap-1.5 ${
-                  geminiLive.isListening
-                    ? "bg-red-500/20 text-red-400 border-red-500/40"
-                    : "bg-[#00ff41]/10 text-[#00ff41] border-[#00ff41]/30 hover:bg-[#00ff41]/20"
-                }`}
-              >
-                {geminiLive.isListening ? <Radio size={12} className="animate-pulse" /> : <Mic size={12} />}
-                {geminiLive.isListening ? "Mic Active" : "Enable Mic"}
-              </button>
+              {!micReady ? (
+                <button
+                  className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 cursor-pointer hover:bg-amber-500/20 transition-colors"
+                  onClick={() => {
+                    geminiLive.startListening();
+                    setMicReady(true);
+                  }}
+                >
+                  <Mic size={12} className="animate-pulse" />
+                  Tap to Activate
+                </button>
+              ) : geminiLive.isSessionActive ? (
+                <>
+                  <span className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1.5">
+                    <Radio size={12} className="animate-pulse" />
+                    Session Active
+                  </span>
+                  <button
+                    className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 flex items-center gap-1 hover:bg-red-500/20 transition-colors"
+                    onClick={() => geminiLive.endSession()}
+                  >
+                    <Square size={10} />
+                    End
+                  </button>
+                </>
+              ) : (
+                <span className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-[#00ff41]/10 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5">
+                  <Radio size={12} className="animate-pulse" />
+                  Say "Echo..."
+                </span>
+              )}
               <Volume2 size={16} className={isSpeaking ? "text-amber-400 animate-pulse" : "text-on-surface-variant"} />
             </div>
           </div>
