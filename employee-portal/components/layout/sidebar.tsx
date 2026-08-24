@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { label: "Home",          href: "/dashboard",           icon: "home" },
+  { label: "Home",          href: "/home",                icon: "home" },
+  { label: "Dashboard",     href: "/dashboard",           icon: "dashboard" },
   { label: "Tasks",         href: "/tasks",               icon: "checklist" },
   { label: "Approvals",     href: "/approvals",           icon: "verified_user" },
   { label: "Twins",         href: "/twins/human",         icon: "manage_accounts" },
@@ -23,7 +24,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const isActive = (href: string) =>
-    pathname === href || (href !== "/dashboard" && pathname?.startsWith(href.split("/").slice(0, 2).join("/")));
+    pathname === href || (href !== "/home" && href !== "/dashboard" && pathname?.startsWith(href.split("/").slice(0, 2).join("/")));
 
   return (
     <nav className="w-[240px] h-screen fixed left-0 top-0 border-r border-border-tech bg-surface-container-lowest flex flex-col py-grid_unit z-40">

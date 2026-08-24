@@ -11,9 +11,10 @@ from app.modules.demo_agent.schemas import (
     ChatRequest, ChatResponse, SessionCreateRequest,
     SessionDetailResponse, SessionResponse,
 )
-from app.modules.demo_agent.service import DemoAgentService
+from app.modules.demo_agent.voice_execution import router as voice_exec_router
 
 router = APIRouter()
+router.include_router(voice_exec_router, prefix="", tags=["Voice Execution"])
 
 
 @router.post(

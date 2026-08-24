@@ -20,6 +20,7 @@ export function middleware(req: NextRequest) {
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
   const isProtectedRoute =
+    pathname.startsWith("/home") ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/twins") ||
     pathname.startsWith("/agents") ||

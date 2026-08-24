@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 512
+    GEMINI_API_KEY: str = ""
 
     # ── Email (future) ───────────────────────────────────────────
     SMTP_HOST: str = ""

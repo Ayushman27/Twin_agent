@@ -14,5 +14,13 @@ def get_ai_provider() -> AIProvider:
     elif provider == "openai":
         from app.ai.llm.openai_provider import OpenAIProvider
         return OpenAIProvider()
+    elif provider == "gemini":
+        from app.ai.llm.gemini_provider import GeminiLLMProvider
+        return GeminiLLMProvider()
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {provider}. Supported: mock, openai")
+        # Default fallback to Gemini if API key present, otherwise Mock
+        if settings.GEMINI_API_KEY:
+            from app.ai.llm.gemini_provider import GeminiLLMProvider
+            return GeminiLLMProvider()
+        from app.ai.llm.mock_provider import MockLLMProvider
+        return MockLLMProvider()
