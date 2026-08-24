@@ -1,6 +1,7 @@
 """Organizations module — Service."""
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenException, NotFoundException
@@ -63,12 +64,34 @@ class OrganizationService:
         total = await self.repo.count_members(org_id)
         pending = await self.repo.count_pending_invitations(org_id)
         active = await self.repo.count_active_members(org_id)
+
+        # Query live count of active teams and roles in this organization
+        from app.modules.roles.models import Role, RoleStatus
+        from app.modules.teams.models import Team, TeamStatus
+        from sqlalchemy import func
+
+        teams_res = await self.db.execute(
+            select(func.count(Team.id)).where(
+                Team.organization_id == org_id,
+                Team.status != TeamStatus.ARCHIVED,
+            )
+        )
+        live_teams_count = teams_res.scalar() or 0
+
+        roles_res = await self.db.execute(
+            select(func.count(Role.id)).where(
+                Role.organization_id == org_id,
+                Role.status == RoleStatus.ACTIVE,
+            )
+        )
+        live_roles_count = roles_res.scalar() or 0
+
         return OrganizationStatsResponse(
             total_members=total,
             active_members=active,
             pending_invitations=pending,
-            teams_count=6,
-            roles_count=14,
+            teams_count=live_teams_count,
+            roles_count=live_roles_count,
         )
 
     async def get_detailed_members(
@@ -79,8 +102,22 @@ class OrganizationService:
             raise NotFoundException("Organization", org_id)
         await self._assert_member(org_id, current_user)
         rows = await self.repo.get_members_with_users(org_id, status=status)
+        
+        # Query active employee role assignments
+        from app.modules.roles.models import EmployeeRoleAssignment, Role
+        assign_res = await self.db.execute(
+            select(EmployeeRoleAssignment.user_id, Role.id, Role.name, Role.department)
+            .join(Role, EmployeeRoleAssignment.role_id == Role.id)
+            .where(
+                EmployeeRoleAssignment.organization_id == org_id,
+                EmployeeRoleAssignment.status == "ACTIVE",
+            )
+        )
+        role_map = {row[0]: (row[1], row[2], row[3]) for row in assign_res.all()}
+
         result = []
         for mem, user in rows:
+            role_info = role_map.get(user.id)
             result.append(
                 MemberDetailResponse(
                     id=mem.id,
@@ -93,6 +130,9 @@ class OrganizationService:
                     employee_id=user.employee_id,
                     department=user.department,
                     job_title=user.job_title,
+                    job_role_id=role_info[0] if role_info else None,
+                    job_role_name=role_info[1] if role_info else user.job_title,
+                    job_role_department=role_info[2] if role_info else user.department,
                     created_at=mem.created_at,
                 )
             )

@@ -21,7 +21,58 @@ export interface DetailedMember {
   employee_id?: string;
   department?: string;
   job_title?: string;
+  job_role_id?: string;
+  job_role_name?: string;
+  job_role_department?: string;
   created_at?: string;
+}
+
+export interface OrganizationDetails {
+  id: string;
+  company_name: string;
+  company_email?: string;
+  company_phone?: string;
+  industry?: string;
+  company_size?: string;
+  employee_count?: number;
+  website?: string;
+  country?: string;
+  city?: string;
+  description?: string;
+  business_model?: string;
+  primary_contact?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Extended profile fields
+  logo_url?: string;
+  legal_name?: string;
+  registration_number?: string;
+  company_type?: string;
+  founded_year?: number | string;
+  support_email?: string;
+  alternate_phone?: string;
+  state?: string;
+  address?: string;
+  postal_code?: string;
+  primary_products?: string;
+  company_domain?: string;
+  linkedin_url?: string;
+}
+
+export interface OrganizationUpdatePayload {
+  company_name?: string;
+  company_email?: string;
+  company_phone?: string;
+  industry?: string;
+  company_size?: string;
+  employee_count?: number;
+  website?: string;
+  country?: string;
+  city?: string;
+  description?: string;
+  business_model?: string;
+  primary_contact?: string;
 }
 
 export const organizationService = {
@@ -77,8 +128,12 @@ export const organizationService = {
     return res.data || [];
   },
 
-  async getOrganization(orgId: string) {
-    return await apiClient.get(`/organizations/${orgId}`);
+  async getOrganization(orgId: string): Promise<OrganizationDetails> {
+    return await apiClient.get<OrganizationDetails>(`/organizations/${orgId}`);
+  },
+
+  async updateOrganization(orgId: string, payload: OrganizationUpdatePayload): Promise<OrganizationDetails> {
+    return await apiClient.put<OrganizationDetails>(`/organizations/${orgId}`, payload);
   },
 
   async getStats(orgId: string): Promise<OrganizationStats> {

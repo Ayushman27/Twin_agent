@@ -69,17 +69,20 @@ class MemberResponse(BaseModel):
 
 
 class MemberDetailResponse(BaseModel):
-    id:              str
-    organization_id: str
-    user_id:         str
-    role:            str
-    status:          MemberStatus
-    name:            Optional[str] = None
-    email:           Optional[str] = None
-    employee_id:     Optional[str] = None
-    department:      Optional[str] = None
-    job_title:       Optional[str] = None
-    created_at:      Optional[datetime] = None
+    id:                  str
+    organization_id:     str
+    user_id:             str
+    role:                str
+    status:              MemberStatus
+    name:                Optional[str] = None
+    email:               Optional[str] = None
+    employee_id:         Optional[str] = None
+    department:          Optional[str] = None
+    job_title:           Optional[str] = None
+    job_role_id:         Optional[str] = None
+    job_role_name:       Optional[str] = None
+    job_role_department: Optional[str] = None
+    created_at:          Optional[datetime] = None
 
 
 class OrganizationStatsResponse(BaseModel):

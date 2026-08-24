@@ -8,3 +8,4 @@ export * from "./knowledge";
 export * from "./integration";
 export * from "./analytics";
 export * from "./audit";
+export * from "./role";
