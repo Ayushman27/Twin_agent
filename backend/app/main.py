@@ -23,8 +23,36 @@ async def lifespan(app: FastAPI):
     """Application lifespan — startup/shutdown events."""
     setup_logging()
     await init_db()
+
+    # ── Auto-start Telegram polling if token is configured ────────────────────
+    # Polling is used for local development (no public webhook URL needed).
+    # In production, use the /api/v1/telegram/setup-webhook endpoint instead
+    # and Telegram will push updates directly to the webhook URL.
+    telegram_poll_task = None
+    if settings.TELEGRAM_BOT_TOKEN:
+        from app.integrations.telegram.polling import start_polling
+        import asyncio as _asyncio
+        telegram_poll_task = _asyncio.create_task(
+            start_polling(settings.TELEGRAM_BOT_TOKEN),
+            name="telegram-polling",
+        )
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "Telegram polling task started for bot token %s...",
+            settings.TELEGRAM_BOT_TOKEN[:10],
+        )
+
     yield
-    # Shutdown: close connections, cleanup
+
+    # ── Shutdown: stop polling ────────────────────────────────────────────────
+    if telegram_poll_task and not telegram_poll_task.done():
+        from app.integrations.telegram.polling import stop_polling
+        stop_polling()
+        try:
+            await _asyncio.wait_for(telegram_poll_task, timeout=5)
+        except Exception:
+            telegram_poll_task.cancel()
+
 
 
 def create_app() -> FastAPI:

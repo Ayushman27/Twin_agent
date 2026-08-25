@@ -90,7 +90,14 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = "noreply@twinagent.ai"
 
-    # ── Rate limiting ─────────────────────────────────────────
+    # ── Telegram Integration ──────────────────────────────────────
+    # Token must be set in .env — NEVER hardcode here.
+    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    # Optional: if set, every webhook request is validated against this secret.
+    # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    TELEGRAM_WEBHOOK_SECRET: Optional[str] = None
+
+    # ── Rate limiting ─────────────────────────────────────────────
     RATE_LIMIT_PER_MINUTE: int = 60
 
     @property

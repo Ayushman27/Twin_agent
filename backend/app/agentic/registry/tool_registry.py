@@ -32,6 +32,15 @@ AVAILABLE_TOOLS = [
         "required_permissions": ["system:execute"],
         "risk_level": "CRITICAL",
         "enabled": True
+    },
+    {
+        "tool_id": "telegram_messaging",
+        "name": "Telegram Live Communication Tool",
+        "description": "Send real-time messages to employees via Telegram & WebSockets.",
+        "capabilities": ["send_message", "resolve_recipient"],
+        "required_permissions": ["messaging:send"],
+        "risk_level": "MEDIUM",
+        "enabled": True
     }
 ]
 
