@@ -247,7 +247,7 @@ export default function TeamDetailPage() {
           teamService.listTeamRoutes(orgId, teamId).catch(() => ({ routes: [], total: 0 })),
           teamService.getTeamKnowledge(orgId, teamId).catch(() => null),
           teamService.getTeamMetrics(orgId, teamId).catch(() => null),
-          organizationService.getDetailedMembers(orgId).catch(() => []),
+          organizationService.getDetailedMembers(orgId, "ACTIVE").catch(() => []),
           roleService.getRoles(orgId).catch(() => ({ roles: [], total: 0 })),
         ]);
         setTeam(teamData);
