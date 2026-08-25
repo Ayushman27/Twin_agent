@@ -75,7 +75,11 @@ async def _broadcast_presence(user_id: str, online: bool) -> None:
         "timestamp": _now_iso(),
     })
     dead = []
+    sent_sockets = set()
     for uid, ws in list(_connections.items()):
+        if ws in sent_sockets:
+            continue
+        sent_sockets.add(ws)
         if uid == user_id:
             continue
         try:
@@ -96,17 +100,6 @@ async def messaging_ws(
 ):
     """
     Persistent WebSocket connection for a single employee.
-
-    Client sends JSON:
-      { "type": "message", "to": "<target_user_id>", "text": "Hello!" }
-      { "type": "ping" }
-
-    Server pushes JSON:
-      { "type": "message",  "from": "...", "to": "...", "text": "...", "id": "...", "timestamp": "..." }
-      { "type": "presence", "user_id": "...", "online": true/false, "timestamp": "..." }
-      { "type": "online_list", "users": ["uid1", "uid2", ...] }
-      { "type": "pong" }
-      { "type": "error", "message": "..." }
     """
     await websocket.accept()
     logger.info("WS connect: user_id=%s", user_id)
@@ -122,6 +115,7 @@ async def messaging_ws(
     # Store connection under user_id + resolve email/name aliases
     _connections[user_id] = websocket
     try:
+        from app.core.database import AsyncSessionLocal
         from app.db.postgres import get_neon_session_maker
         from app.modules.auth.models import User
         from sqlalchemy import select, or_
@@ -235,6 +229,22 @@ async def messaging_ws(
 
                 # Deliver to recipient via WebSocket if online
                 recipient_ws = _connections.get(to_user)
+                if not recipient_ws:
+                    try:
+                        from app.core.database import AsyncSessionLocal
+                        from app.db.postgres import get_neon_session_maker
+                        from app.modules.auth.models import User
+                        from sqlalchemy import select, or_
+                        neon_maker = get_neon_session_maker()
+                        id_fac = neon_maker if neon_maker is not None else AsyncSessionLocal
+                        async with id_fac() as id_session:
+                            r_u = await id_session.execute(select(User).where(or_(User.id == to_user, User.email.ilike(to_user), User.name.ilike(to_user))))
+                            target_u = r_u.scalars().first()
+                            if target_u:
+                                recipient_ws = _connections.get(target_u.id) or _connections.get(target_u.email) or _connections.get(target_u.name)
+                    except Exception:
+                        pass
+
                 if recipient_ws:
                     try:
                         await recipient_ws.send_text(json.dumps({
@@ -266,7 +276,9 @@ async def messaging_ws(
     except Exception as exc:
         logger.exception("WS error for user_id=%s: %s", user_id, exc)
     finally:
-        _connections.pop(user_id, None)
+        for k in list(_connections.keys()):
+            if _connections.get(k) is websocket:
+                _connections.pop(k, None)
         await _broadcast_presence(user_id, online=False)
 
 
@@ -301,8 +313,23 @@ async def get_history(
     db_messages = []
     try:
         from app.core.database import AsyncSessionLocal
+        from app.db.postgres import get_neon_session_maker
         from app.db.models.message import Message
+        from app.modules.auth.models import User
         from sqlalchemy import select, or_, and_
+
+        # Map user display names
+        user_name_map = {}
+        try:
+            neon_maker = get_neon_session_maker()
+            id_fac = neon_maker if neon_maker is not None else AsyncSessionLocal
+            async with id_fac() as id_session:
+                res_u = await id_session.execute(select(User.id, User.name))
+                for uid, uname in res_u.all():
+                    if uname:
+                        user_name_map[uid] = uname
+        except Exception:
+            pass
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -322,10 +349,11 @@ async def get_history(
             res = await session.execute(stmt)
             rows = res.scalars().all()
             for r in reversed(rows):
+                sender_name = user_name_map.get(r.sender_id, r.sender_id)
                 db_messages.append({
                     "id": r.id,
                     "from": r.sender_id,
-                    "from_name": r.sender_id,
+                    "from_name": sender_name,
                     "to": r.receiver_id,
                     "text": r.content,
                     "timestamp": r.created_at.isoformat() if r.created_at else _now_iso(),

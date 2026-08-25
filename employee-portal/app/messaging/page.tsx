@@ -65,13 +65,33 @@ function ConnectionBar({ status }: { status: string }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function Bubble({ msg, isSelf }: { msg: ChatMessage; isSelf: boolean }) {
+function Bubble({
+  msg,
+  isSelf,
+  directory,
+  myUserName,
+}: {
+  msg: ChatMessage;
+  isSelf: boolean;
+  directory?: ContactItem[];
+  myUserName?: string;
+}) {
+  const senderContact = directory?.find(
+    (c) =>
+      c.user_id === msg.from ||
+      c.email?.toLowerCase() === msg.from?.toLowerCase() ||
+      c.name?.toLowerCase() === msg.from?.toLowerCase()
+  );
+  const displayName = isSelf
+    ? (myUserName || "You")
+    : (senderContact?.name || msg.from_name || msg.from);
+
   return (
     <div className={`flex gap-2 items-end ${isSelf ? "flex-row-reverse" : "flex-row"}`}>
       {/* Avatar */}
       {!isSelf && (
         <div className="w-7 h-7 rounded-sm bg-[#0a2a0a] border border-[#00ff4133] flex items-center justify-center font-mono text-[9px] text-[#00ff41] flex-shrink-0">
-          {initials(msg.from_name)}
+          {initials(displayName)}
         </div>
       )}
 
@@ -79,7 +99,7 @@ function Bubble({ msg, isSelf }: { msg: ChatMessage; isSelf: boolean }) {
         {/* Sender name (only for received messages) */}
         {!isSelf && (
           <span className="font-mono text-[9px] text-[#4a7c4a] px-1">
-            {msg.from_name}
+            {displayName}
           </span>
         )}
 
@@ -190,10 +210,11 @@ function ContactCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function MessagingPage() {
-  const { user: currentUser } = useAuth();
-  const myUserId = currentUser?.id || "e058ad47-9e2f-42c9-80fc-b6391b9938f1";
-  const myUserName = currentUser?.name || "Ayushman";
-  const myUserTitle = currentUser?.job_title || currentUser?.role || "Software engineer";
+  const { user: currentUser, isLoading } = useAuth();
+  const myUserId = currentUser?.id || "";
+  const myUserName = currentUser?.name || "";
+  const myUserTitle = currentUser?.job_title || currentUser?.role || "Employee";
+
   const [activePeer, setActivePeer] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -242,31 +263,59 @@ export default function MessagingPage() {
       },
     });
 
-  // Filter messages for the active conversation
-  const conversationMessages = messages.filter(
-    (m) =>
-      (m.from === myUserId && m.to === activePeer) ||
-      (m.from === activePeer && (m.to === myUserId || m.to === "system")) ||
-      (activePeer === "system" && m.to === "system")
+  // Filter messages for the active conversation (handling UUID, email, or name matching)
+  const activeContact = directory.find((c) => c.user_id === activePeer);
+  const peerIdentifiers = new Set(
+    [
+      activePeer,
+      activeContact?.user_id,
+      activeContact?.email?.toLowerCase(),
+      activeContact?.name?.toLowerCase(),
+    ].filter(Boolean) as string[]
   );
+
+  const myIdentifiers = new Set(
+    [
+      myUserId,
+      currentUser?.id,
+      currentUser?.email?.toLowerCase(),
+      currentUser?.name?.toLowerCase(),
+    ].filter(Boolean) as string[]
+  );
+
+  const conversationMessages = messages.filter((m) => {
+    const fromVal = m.from?.toLowerCase();
+    const toVal = m.to?.toLowerCase();
+
+    const isFromMe = myIdentifiers.has(m.from) || myIdentifiers.has(fromVal);
+    const isToMe = myIdentifiers.has(m.to) || myIdentifiers.has(toVal);
+    const isFromPeer = peerIdentifiers.has(m.from) || peerIdentifiers.has(fromVal);
+    const isToPeer = peerIdentifiers.has(m.to) || peerIdentifiers.has(toVal);
+
+    if (isFromMe && isToPeer) return true;
+    if (isFromPeer && (isToMe || m.to === "system")) return true;
+    if (activePeer === "system" && m.to === "system") return true;
+    return false;
+  });
 
   // Filter directory contacts by search query
   const filteredContacts = directory.filter((c) => {
-    if (c.user_id === myUserId || c.name.toLowerCase() === myUserName.toLowerCase()) return false;
+    if (c.user_id === myUserId || c.name?.toLowerCase() === myUserName?.toLowerCase()) return false;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
-      c.name.toLowerCase().includes(q) ||
-      c.job_title.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.user_id.toLowerCase().includes(q)
+      c.name?.toLowerCase().includes(q) ||
+      c.job_title?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q) ||
+      c.user_id?.toLowerCase().includes(q)
     );
   });
 
   // Last message per peer for sidebar preview
   const lastMsgByPeer: Record<string, string> = {};
   messages.forEach((m) => {
-    const peer = m.from === myUserId ? m.to : m.from;
+    const isFromMe = myIdentifiers.has(m.from) || myIdentifiers.has(m.from?.toLowerCase());
+    const peer = isFromMe ? m.to : m.from;
     lastMsgByPeer[peer] = m.text;
   });
 
@@ -350,7 +399,7 @@ export default function MessagingPage() {
           </p>
           {filteredContacts.length === 0 ? (
             <p className="font-mono text-[10px] text-[#2a4a2a] px-4 py-3">
-              No employees found matching "{searchQuery}".
+              No employees found matching &quot;{searchQuery}&quot;.
             </p>
           ) : (
             filteredContacts.map((contact) => (
@@ -443,7 +492,13 @@ export default function MessagingPage() {
                 </div>
               ) : (
                 conversationMessages.map((msg) => (
-                  <Bubble key={msg.id} msg={msg} isSelf={msg.isSelf} />
+                  <Bubble
+                    key={msg.id}
+                    msg={msg}
+                    isSelf={msg.isSelf}
+                    directory={directory}
+                    myUserName={myUserName}
+                  />
                 ))
               )}
               <div ref={messagesEndRef} />
@@ -455,7 +510,7 @@ export default function MessagingPage() {
                 {/* Status indicator */}
                 <span
                   className="font-mono text-[10px] text-[#00ff41] flex-shrink-0"
-                  title={`Connected as ${myUserId}`}
+                  title={`Connected as ${myUserName || myUserId}`}
                 >
                   &gt;
                 </span>
@@ -464,7 +519,7 @@ export default function MessagingPage() {
                   id="message-input"
                   ref={inputRef}
                   className="flex-1 bg-[#0a120a] border border-[#1a3a1a] font-mono text-[12px] text-[#c8e6c9] px-3 py-2.5 outline-none focus:border-[#00ff41] transition-colors placeholder:text-[#2a4a2a] caret-[#00ff41]"
-                  placeholder={`Message ${activePeer}…`}
+                  placeholder={`Message ${activeContact?.name || activePeer}…`}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
