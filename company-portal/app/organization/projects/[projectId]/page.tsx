@@ -250,7 +250,7 @@ export default function ProjectDetailPage() {
           projectService.getProjectHealth(orgId, projectId).catch(() => null),
           projectService.getProjectAnalytics(orgId, projectId).catch(() => null),
           teamService.getTeams(orgId).catch(() => ({ teams: [], total: 0 })),
-          organizationService.getDetailedMembers(orgId).catch(() => []),
+          organizationService.getDetailedMembers(orgId, "ACTIVE").catch(() => []),
         ]);
 
         setProject(projData);

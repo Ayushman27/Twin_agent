@@ -84,10 +84,11 @@ export default function PeoplePage() {
 
       try {
         const [membersData, rolesData] = await Promise.all([
-          organizationService.getDetailedMembers(orgId),
+          organizationService.getDetailedMembers(orgId, "ACTIVE"),
           roleService.getRoles(orgId).catch(() => ({ roles: [], total: 0 })),
         ]);
-        setMembers(membersData);
+        const activeMembers = (membersData || []).filter((m) => m.status === "ACTIVE");
+        setMembers(activeMembers);
         setAvailableRoles(rolesData.roles || []);
       } catch (err) {
         console.error("Failed to load organization directory:", err);
