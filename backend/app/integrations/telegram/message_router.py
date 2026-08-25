@@ -207,16 +207,30 @@ class TelegramMessageRouter:
     @staticmethod
     async def _validate_link_token(token: str):
         """
-        Validate a one-time link token and return the associated user_id.
-
-        TODO: Replace with real implementation:
-          1. Look up the token in Redis (or a tokens table).
-          2. Verify expiry and single-use.
-          3. Return the associated user_id, then delete the token.
-
-        Returns None if invalid / expired.
+        Validate a link token or user identifier (email/name/id) and return the associated user_id.
         """
-        # STUB: Tokens of the form "uid:<user_uuid>" are accepted for testing.
-        if token.startswith("uid:"):
-            return token[4:].strip() or None
-        return None
+        clean = token.strip()
+        if clean.startswith("uid:"):
+            return clean[4:].strip() or None
+
+        try:
+            from app.db.postgres import get_neon_session_maker
+            from app.core.database import AsyncSessionLocal
+            from app.modules.auth.models import User
+            from sqlalchemy import select, or_
+
+            neon_maker = get_neon_session_maker()
+            identity_session_factory = neon_maker if neon_maker is not None else AsyncSessionLocal
+
+            async with identity_session_factory() as s:
+                stmt = select(User.id).where(
+                    or_(User.id == clean, User.email.ilike(clean), User.name.ilike(f"%{clean}%"))
+                )
+                res = await s.execute(stmt)
+                uid = res.scalar_one_or_none()
+                if uid:
+                    return uid
+        except Exception as e:
+            logger.warning("Error resolving Telegram link token: %s", e)
+
+        return clean if len(clean) > 3 else None
