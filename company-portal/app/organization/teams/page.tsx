@@ -106,7 +106,7 @@ export default function TeamsPage() {
       try {
         const [teamsRes, membersRes] = await Promise.all([
           teamService.getTeams(orgId),
-          organizationService.getDetailedMembers(orgId).catch(() => []),
+          organizationService.getDetailedMembers(orgId, "ACTIVE").catch(() => []),
         ]);
         setTeams(teamsRes.teams || []);
         setOrgMembers(membersRes.filter((m) => m.status === "ACTIVE"));

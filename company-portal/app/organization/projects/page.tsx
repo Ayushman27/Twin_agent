@@ -100,7 +100,7 @@ export default function ProjectsPage() {
         const [projRes, teamsRes, membersRes] = await Promise.all([
           projectService.getProjects(orgId),
           teamService.getTeams(orgId).catch(() => ({ teams: [], total: 0 })),
-          organizationService.getDetailedMembers(orgId).catch(() => []),
+          organizationService.getDetailedMembers(orgId, "ACTIVE").catch(() => []),
         ]);
         setProjects(projRes.projects || []);
         setTeams(teamsRes.teams || []);

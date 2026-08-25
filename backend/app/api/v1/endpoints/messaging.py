@@ -280,12 +280,20 @@ async def get_history(
     try:
         from app.core.database import AsyncSessionLocal
         from app.db.models.message import Message
-        from sqlalchemy import select
+        from sqlalchemy import select, or_, and_
 
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(Message)
-                .where(Message.conversation_id == key)
+                .where(
+                    or_(
+                        Message.conversation_id == key,
+                        Message.conversation_id == f"{user_id}|telegram",
+                        Message.conversation_id == f"{peer_id}|telegram",
+                        and_(Message.sender_id == user_id, Message.receiver_id == peer_id),
+                        and_(Message.sender_id == peer_id, Message.receiver_id == user_id),
+                    )
+                )
                 .order_by(Message.created_at.desc())
                 .limit(limit)
             )
