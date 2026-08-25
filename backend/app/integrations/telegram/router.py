@@ -173,6 +173,35 @@ async def webhook_info() -> dict:
 
 
 @router.get(
+    "/status",
+    summary="Telegram Integration Status",
+    description="Returns high-level status of Telegram configuration, webhook registration, and bot connection.",
+)
+async def telegram_status() -> dict:
+    configured = bool(settings.TELEGRAM_BOT_TOKEN)
+    webhook_configured = False
+    bot_connected = False
+
+    if configured:
+        try:
+            sender = TelegramSender()
+            me = await sender.get_me()
+            bot_connected = bool(me.get("ok"))
+
+            wb = await sender.get_webhook_info()
+            url = wb.get("result", {}).get("url", "")
+            webhook_configured = bool(url)
+        except Exception as exc:
+            logger.warning("Error checking Telegram status: %s", exc)
+
+    return {
+        "configured": configured,
+        "webhook_configured": webhook_configured,
+        "bot_connected": bot_connected,
+    }
+
+
+@router.get(
     "/health",
     summary="Telegram Integration Health",
     description="Confirms the bot token is set and the bot is reachable via Telegram API.",

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useMessaging, ChatMessage } from "@/hooks/use-messaging";
+import { useAuth } from "@/hooks/use-auth";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Random demo user ID — generated client-side only to avoid hydration mismatch.
@@ -111,14 +112,24 @@ function Bubble({ msg, isSelf }: { msg: ChatMessage; isSelf: boolean }) {
 }
 
 // ── User list item ────────────────────────────────────────────────────────────
-function UserItem({
-  userId,
+export interface ContactItem {
+  user_id: string;
+  name: string;
+  email: string;
+  job_title: string;
+  telegram_connected: boolean;
+  telegram_username?: string;
+}
+
+// ── Contact Item ─────────────────────────────────────────────────────────────
+function ContactCard({
+  contact,
   isOnline,
   isSelected,
   lastMsg,
   onClick,
 }: {
-  userId: string;
+  contact: ContactItem;
   isOnline: boolean;
   isSelected: boolean;
   lastMsg?: string;
@@ -126,7 +137,7 @@ function UserItem({
 }) {
   return (
     <button
-      id={`user-item-${userId}`}
+      id={`contact-item-${contact.user_id}`}
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-3 py-2.5 border-l-2 transition-all duration-150 cursor-pointer text-left ${
         isSelected
@@ -134,7 +145,6 @@ function UserItem({
           : "border-transparent hover:bg-[#0a120a] text-[#8aab8a]"
       }`}
     >
-      {/* Avatar */}
       <div
         className={`w-8 h-8 rounded-sm flex items-center justify-center font-mono text-[10px] flex-shrink-0 ${
           isSelected
@@ -142,13 +152,29 @@ function UserItem({
             : "bg-[#0a2a0a] border border-[#1a3a1a] text-[#4a7a4a]"
         }`}
       >
-        {initials(userId)}
+        {initials(contact.name || contact.user_id)}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] truncate">{userId}</span>
+          <span className="font-mono text-[11px] font-medium truncate">
+            {contact.name || contact.user_id}
+          </span>
           <StatusDot online={isOnline} />
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="font-mono text-[9px] text-[#3a6a3a] truncate">
+            {contact.job_title || "Employee"}
+          </span>
+          <span
+            className={`font-mono text-[8px] px-1 rounded-sm border ${
+              contact.telegram_connected
+                ? "border-[#00ff4140] text-[#00ff41] bg-[#00ff410a]"
+                : "border-[#ffffff20] text-[#666]"
+            }`}
+          >
+            {contact.telegram_connected ? "Telegram" : "UI Only"}
+          </span>
         </div>
         {lastMsg && (
           <p className="font-mono text-[9px] text-[#3a5a3a] truncate mt-0.5">
@@ -162,12 +188,16 @@ function UserItem({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function MessagingPage() {
-  const [myUserId, setMyUserId] = useState(DEMO_USER_ID);
-  const [inputUserId, setInputUserId] = useState(DEMO_USER_ID);
+  const { user: currentUser } = useAuth();
+  const myUserId = currentUser?.id || "e058ad47-9e2f-42c9-80fc-b6391b9938f1";
+  const myUserName = currentUser?.name || "Ayushman";
+  const myUserTitle = currentUser?.job_title || currentUser?.role || "Software engineer";
   const [activePeer, setActivePeer] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
-  const [customPeerId, setCustomPeerId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [directory, setDirectory] = useState<ContactItem[]>([]);
   const [systemEvents, setSystemEvents] = useState<string[]>([]);
+  const [tgStatus, setTgStatus] = useState<{ configured: boolean; webhook_configured: boolean; bot_connected: boolean } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -175,10 +205,26 @@ export default function MessagingPage() {
     setSystemEvents((prev) => [...prev.slice(-19), `[${formatTime(new Date().toISOString())}] ${text}`]);
   }, []);
 
+  // Fetch employee directory (isolated by organization)
+  useEffect(() => {
+    if (!myUserId) return;
+    fetch(`http://localhost:8000/api/v1/messaging/contacts?user_id=${encodeURIComponent(myUserId)}`)
+      .then((res) => res.json())
+      .then((data) => setDirectory(data.contacts || []))
+      .catch(() => {});
+  }, [myUserId]);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/api/v1/telegram/status")
+      .then((res) => res.json())
+      .then((data) => setTgStatus(data))
+      .catch(() => setTgStatus(null));
+  }, []);
+
   const { status, onlineUsers, messages, sendMessage, loadHistory, clearMessages } =
     useMessaging({
       userId: myUserId,
-      displayName: myUserId,
+      displayName: myUserName,
       onMessage: (msg) => {
         addEvent(`↙ Message from ${msg.from_name}`);
       },
@@ -194,16 +240,22 @@ export default function MessagingPage() {
   const conversationMessages = messages.filter(
     (m) =>
       (m.from === myUserId && m.to === activePeer) ||
-      (m.from === activePeer && m.to === myUserId)
+      (m.from === activePeer && (m.to === myUserId || m.to === "system")) ||
+      (activePeer === "system" && m.to === "system")
   );
 
-  // All known peers = online users + peers from message history
-  const allPeers = Array.from(
-    new Set([
-      ...onlineUsers,
-      ...messages.map((m) => (m.from === myUserId ? m.to : m.from)),
-    ])
-  ).filter((u) => u !== myUserId);
+  // Filter directory contacts by search query
+  const filteredContacts = directory.filter((c) => {
+    if (c.user_id === myUserId || c.name.toLowerCase() === myUserName.toLowerCase()) return false;
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      c.name.toLowerCase().includes(q) ||
+      c.job_title.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.user_id.toLowerCase().includes(q)
+    );
+  });
 
   // Last message per peer for sidebar preview
   const lastMsgByPeer: Record<string, string> = {};
@@ -240,102 +292,78 @@ export default function MessagingPage() {
     }
   };
 
-  const handleSetIdentity = () => {
-    if (inputUserId.trim()) setMyUserId(inputUserId.trim());
-  };
-
-  const handleAddCustomPeer = () => {
-    if (!customPeerId.trim()) return;
-    setActivePeer(customPeerId.trim());
-    setCustomPeerId("");
-  };
-
   return (
     <div className="flex h-full gap-0 bg-[#050505] text-[#c8e6c9] overflow-hidden">
 
-      {/* ── Left Sidebar: Contacts ─────────────────────────────────────────── */}
-      <aside className="w-[240px] flex-shrink-0 border-r border-[#1a3a1a] flex flex-col h-full">
-        {/* Identity panel */}
+      {/* ── Left Sidebar: Contacts & Search ─────────────────────────────────── */}
+      <aside className="w-[250px] flex-shrink-0 border-r border-[#1a3a1a] flex flex-col h-full">
+        {/* User Identity Panel */}
         <div className="p-3 border-b border-[#1a3a1a] bg-[#050505]">
-          <p className="font-mono text-[9px] text-[#3a6a3a] uppercase tracking-widest mb-1.5">
-            Your Identity
-          </p>
-          <div className="flex gap-1.5">
-            <input
-              id="identity-input"
-              className="flex-1 bg-[#0a120a] border border-[#1a3a1a] font-mono text-[10px] text-[#00ff41] px-2 py-1.5 outline-none focus:border-[#00ff41] transition-colors placeholder:text-[#2a4a2a]"
-              value={inputUserId}
-              onChange={(e) => setInputUserId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSetIdentity()}
-              placeholder="your-user-id"
-            />
-            <button
-              id="set-identity-btn"
-              onClick={handleSetIdentity}
-              className="px-2 py-1.5 bg-[#00ff41] text-[#050505] font-mono text-[9px] font-bold hover:bg-[#00e639] transition-colors"
-            >
-              SET
-            </button>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-sm bg-[#00ff4120] border border-[#00ff41] flex items-center justify-center font-mono text-[10px] text-[#00ff41] flex-shrink-0">
+              {initials(myUserName)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-mono text-[11px] font-bold text-[#c8e6c9] truncate">
+                {myUserName}
+              </p>
+              <p className="font-mono text-[9px] text-[#3a6a3a] truncate">
+                {myUserTitle}
+              </p>
+            </div>
           </div>
-          <p className="font-mono text-[9px] text-[#3a6a3a] mt-1.5 truncate">
-            Active: <span className="text-[#00ff41]">{myUserId}</span>
-          </p>
-          <div className="mt-2">
+          <div className="mt-2.5 flex flex-col gap-1">
             <ConnectionBar status={status} />
+            <div className="font-mono text-[9px] flex items-center gap-1.5 text-[#3a6a3a]">
+              <span>Telegram:</span>
+              <span style={{ color: tgStatus?.bot_connected ? "#00ff41" : tgStatus?.configured ? "#ffd700" : "#ff4444" }}>
+                {tgStatus?.bot_connected ? "BOT ONLINE" : tgStatus?.configured ? "CONFIGURED" : "OFFLINE"}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Add custom peer */}
+        {/* Search Employees */}
         <div className="p-3 border-b border-[#1a3a1a]">
           <p className="font-mono text-[9px] text-[#3a6a3a] uppercase tracking-widest mb-1.5">
-            Open Chat
+            Search Whom to Message
           </p>
-          <div className="flex gap-1.5">
-            <input
-              id="peer-input"
-              className="flex-1 bg-[#0a120a] border border-[#1a3a1a] font-mono text-[10px] text-[#c8e6c9] px-2 py-1.5 outline-none focus:border-[#00ff4180] transition-colors placeholder:text-[#2a4a2a]"
-              value={customPeerId}
-              onChange={(e) => setCustomPeerId(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddCustomPeer()}
-              placeholder="peer-user-id"
-            />
-            <button
-              id="open-chat-btn"
-              onClick={handleAddCustomPeer}
-              className="px-2 py-1.5 border border-[#1a3a1a] text-[#00ff41] font-mono text-[9px] hover:border-[#00ff41] hover:bg-[#00ff4110] transition-colors"
-            >
-              →
-            </button>
-          </div>
+          <input
+            id="search-employee-input"
+            className="w-full bg-[#0a120a] border border-[#1a3a1a] font-mono text-[10px] text-[#c8e6c9] px-2.5 py-1.5 outline-none focus:border-[#00ff41] transition-colors placeholder:text-[#2a4a2a]"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Type employee name or role..."
+          />
         </div>
 
-        {/* Contact list */}
+        {/* Employee Contact List */}
         <div className="flex-1 overflow-y-auto scroll-hidden">
           <p className="font-mono text-[9px] text-[#2a5a2a] uppercase tracking-widest px-3 py-2">
-            Contacts ({allPeers.length})
+            Employees ({filteredContacts.length})
           </p>
-          {allPeers.length === 0 ? (
+          {filteredContacts.length === 0 ? (
             <p className="font-mono text-[10px] text-[#2a4a2a] px-4 py-3">
-              No contacts yet. Add a peer ID above or wait for someone to connect.
+              No employees found matching "{searchQuery}".
             </p>
           ) : (
-            allPeers.map((peer) => (
-              <UserItem
-                key={peer}
-                userId={peer}
-                isOnline={onlineUsers.includes(peer)}
-                isSelected={activePeer === peer}
-                lastMsg={lastMsgByPeer[peer]}
-                onClick={() => setActivePeer(peer)}
+            filteredContacts.map((contact) => (
+              <ContactCard
+                key={contact.user_id}
+                contact={contact}
+                isOnline={onlineUsers.includes(contact.user_id)}
+                isSelected={activePeer === contact.user_id}
+                lastMsg={lastMsgByPeer[contact.user_id]}
+                onClick={() => setActivePeer(contact.user_id)}
               />
             ))
           )}
         </div>
 
-        {/* Online count */}
+        {/* Stats */}
         <div className="p-3 border-t border-[#1a3a1a]">
           <p className="font-mono text-[9px] text-[#3a6a3a]">
-            {onlineUsers.length} peer{onlineUsers.length !== 1 ? "s" : ""} online
+            {onlineUsers.length} employee{onlineUsers.length !== 1 ? "s" : ""} online
           </p>
         </div>
       </aside>
@@ -345,34 +373,47 @@ export default function MessagingPage() {
         {activePeer ? (
           <>
             {/* Chat header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a3a1a] bg-[#050505] flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-sm bg-[#0a2a0a] border border-[#1a3a1a] flex items-center justify-center font-mono text-[10px] text-[#00ff41]">
-                  {initials(activePeer)}
-                </div>
-                <div>
-                  <p className="font-mono text-[12px] text-[#c8e6c9]">{activePeer}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <StatusDot online={onlineUsers.includes(activePeer)} />
-                    <span className="font-mono text-[9px] text-[#3a6a3a]">
-                      {onlineUsers.includes(activePeer) ? "Online" : "Offline"}
-                    </span>
+            {(() => {
+              const activeContact = directory.find((c) => c.user_id === activePeer);
+              const displayName = activeContact?.name || activePeer;
+              const subtitle = activeContact?.job_title || activePeer;
+              return (
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a3a1a] bg-[#050505] flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-sm bg-[#0a2a0a] border border-[#1a3a1a] flex items-center justify-center font-mono text-[10px] text-[#00ff41]">
+                      {initials(displayName)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-[12px] text-[#c8e6c9] font-bold">{displayName}</p>
+                        {activeContact?.telegram_connected && (
+                          <span className="font-mono text-[8px] border border-[#00ff4140] text-[#00ff41] bg-[#00ff410a] px-1 rounded-sm">
+                            Telegram Linked
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono text-[9px] text-[#3a6a3a]">{subtitle}</span>
+                        <span className="text-[#3a6a3a]">·</span>
+                        <StatusDot online={onlineUsers.includes(activePeer)} />
+                        <span className="font-mono text-[9px] text-[#3a6a3a]">
+                          {onlineUsers.includes(activePeer) ? "Online" : "Offline"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      id="close-chat-btn"
+                      onClick={() => setActivePeer(null)}
+                      className="font-mono text-[11px] text-[#3a5a3a] hover:text-[#ff4444] transition-colors"
+                    >
+                      ✕
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-[9px] text-[#3a6a3a] border border-[#1a3a1a] px-2 py-1">
-                  WebSocket
-                </span>
-                <button
-                  id="close-chat-btn"
-                  onClick={() => setActivePeer(null)}
-                  className="font-mono text-[11px] text-[#3a5a3a] hover:text-[#ff4444] transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Messages area */}
             <div

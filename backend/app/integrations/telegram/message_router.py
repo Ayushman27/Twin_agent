@@ -98,6 +98,49 @@ class TelegramMessageRouter:
         if user_id is None:
             return _MSG_UNLINKED
 
+        # ── Idempotency Check & Inbound Message Persistence ───────────────────
+        tg_msg_id = str(msg.message_id) if msg and hasattr(msg, "message_id") else str(update.update_id)
+        try:
+            from app.db.models.message import Message
+            from app.api.v1.endpoints.messaging import broadcast_message_event
+            from sqlalchemy import select
+            import uuid
+            from datetime import datetime, timezone
+
+            stmt = select(Message).where(Message.telegram_message_id == tg_msg_id)
+            existing = await self._resolver._session.execute(stmt)
+            if existing.scalar_one_or_none():
+                logger.info("Duplicate Telegram message_id=%s — skipping DB insert.", tg_msg_id)
+            else:
+                convo_id = f"{user_id}|telegram"
+                sender_name = (sender.first_name if sender and hasattr(sender, "first_name") else None) or user_id
+                inbound_msg = Message(
+                    id=str(uuid.uuid4()),
+                    conversation_id=convo_id,
+                    sender_id=user_id,
+                    receiver_id="system",
+                    channel="telegram",
+                    content=text,
+                    telegram_message_id=tg_msg_id,
+                    chat_id=chat_id,
+                    status="RECEIVED",
+                )
+                self._resolver._session.add(inbound_msg)
+                await self._resolver._session.flush()
+
+                # Realtime push to active WebSocket clients
+                await broadcast_message_event({
+                    "type": "message",
+                    "id": inbound_msg.id,
+                    "from": user_id,
+                    "from_name": sender_name,
+                    "to": "system",
+                    "text": text,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+        except Exception as exc:
+            logger.warning("Error persisting inbound Telegram message: %s", exc)
+
         # ── Build user context ─────────────────────────────────────────────────
         user_ctx = UserContext(
             user_id=user_id,
@@ -106,7 +149,7 @@ class TelegramMessageRouter:
             telegram_first_name=sender.first_name if sender else None,
         )
 
-        # ── Process via TwinAgentContext (SLM stub) ────────────────────────────
+        # ── Process via TwinAgentContext ───────────────────────────────────────
         return await self._context.process(user_ctx, text)
 
     # ── Command handlers ──────────────────────────────────────────────────────
