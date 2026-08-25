@@ -5,20 +5,18 @@ from app.ai.llm.interface import AIProvider
 from app.core.config import settings
 
 
-@lru_cache(maxsize=1)
 def get_ai_provider() -> AIProvider:
     provider = settings.LLM_PROVIDER.lower()
-    if provider == "mock":
-        from app.ai.llm.mock_provider import MockLLMProvider
-        return MockLLMProvider()
+    if provider == "gemini" or (settings.GEMINI_API_KEY and provider != "mock" and provider != "openai"):
+        from app.ai.llm.gemini_provider import GeminiLLMProvider
+        return GeminiLLMProvider()
     elif provider == "openai":
         from app.ai.llm.openai_provider import OpenAIProvider
         return OpenAIProvider()
-    elif provider == "gemini":
-        from app.ai.llm.gemini_provider import GeminiLLMProvider
-        return GeminiLLMProvider()
+    elif provider == "mock":
+        from app.ai.llm.mock_provider import MockLLMProvider
+        return MockLLMProvider()
     else:
-        # Default fallback to Gemini if API key present, otherwise Mock
         if settings.GEMINI_API_KEY:
             from app.ai.llm.gemini_provider import GeminiLLMProvider
             return GeminiLLMProvider()

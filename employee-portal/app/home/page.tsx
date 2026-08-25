@@ -526,7 +526,7 @@ export default function HomePage() {
                 <h3 className="font-label-caps text-xs font-bold text-on-surface">Echo — Voice Agent</h3>
                 <span className="font-code-sm text-[10px] text-primary-container flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                  Say "Echo" to activate
+                  Say &quot;Echo&quot; to activate
                 </span>
               </div>
             </div>
@@ -559,7 +559,7 @@ export default function HomePage() {
               ) : (
                 <span className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-[#00ff41]/10 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5">
                   <Radio size={12} className="animate-pulse" />
-                  Say "Echo..."
+                  Say &quot;Echo...&quot;
                 </span>
               )}
               <Volume2 size={16} className={isSpeaking ? "text-amber-400 animate-pulse" : "text-on-surface-variant"} />
