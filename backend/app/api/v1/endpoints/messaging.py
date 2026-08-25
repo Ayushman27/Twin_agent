@@ -46,6 +46,26 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+async def broadcast_message_event(payload: dict) -> None:
+    """
+    Broadcast a message payload to active WebSocket connections of sender and receiver.
+    Callable from external services (e.g. Telegram webhook, Voice Agent).
+    """
+    sender_id = payload.get("from")
+    to_user = payload.get("to")
+    payload_str = json.dumps(payload)
+
+    target_uids = {uid for uid in [sender_id, to_user] if uid}
+    for uid in target_uids:
+        ws = _connections.get(uid)
+        if ws:
+            try:
+                await ws.send_text(payload_str)
+            except Exception as exc:
+                logger.warning("Failed to push WS event to %s: %s", uid, exc)
+                _connections.pop(uid, None)
+
+
 async def _broadcast_presence(user_id: str, online: bool) -> None:
     """Notify all connected clients of a presence change."""
     payload = json.dumps({
@@ -143,9 +163,10 @@ async def messaging_ws(
                     }))
                     continue
 
+                msg_id = str(uuid.uuid4())
                 msg_payload = {
                     "type": "message",
-                    "id": str(uuid.uuid4()),
+                    "id": msg_id,
                     "from": user_id,
                     "from_name": display_name or user_id,
                     "to": to_user,
@@ -157,17 +178,57 @@ async def messaging_ws(
                 key = _convo_key(user_id, to_user)
                 _history[key].append(msg_payload)
 
-                # Deliver to recipient if online
+                # Persist to Database & forward to Telegram if target has Telegram connected
+                delivered_ws = False
+                delivered_tg = False
+                try:
+                    from app.core.database import AsyncSessionLocal
+                    from app.services.communication import CommunicationService
+                    from app.db.models.message import Message
+
+                    async with AsyncSessionLocal() as session:
+                        comm = CommunicationService(session)
+                        # Check Telegram
+                        tg_res = await comm.send_message(
+                            sender_id=user_id,
+                            recipient_identifier=to_user,
+                            content=text,
+                            sender_name=display_name or user_id,
+                        )
+                        if tg_res and tg_res.get("success"):
+                            delivered_tg = True
+                        else:
+                            # Save as standard WS message in DB
+                            db_msg = Message(
+                                id=msg_id,
+                                conversation_id=key,
+                                sender_id=user_id,
+                                receiver_id=to_user,
+                                channel="websocket",
+                                content=text,
+                                status="SENT",
+                            )
+                            session.add(db_msg)
+                            await session.commit()
+                except Exception as exc:
+                    logger.warning("DB/Telegram persistence error in WS message: %s", exc)
+
+                # Deliver to recipient if online via WS
                 recipient_ws = _connections.get(to_user)
                 if recipient_ws:
                     try:
                         await recipient_ws.send_text(json.dumps(msg_payload))
+                        delivered_ws = True
                     except Exception as exc:
                         logger.warning("Failed to deliver to %s: %s", to_user, exc)
                         _connections.pop(to_user, None)
 
                 # Echo back to sender as confirmation
-                await websocket.send_text(json.dumps({**msg_payload, "delivered": bool(recipient_ws)}))
+                await websocket.send_text(json.dumps({
+                    **msg_payload,
+                    "delivered": delivered_ws or delivered_tg,
+                    "telegram_sent": delivered_tg,
+                }))
 
                 logger.info("Message %s → %s (%d chars)", user_id, to_user, len(text))
                 continue
@@ -204,7 +265,7 @@ async def get_online_users() -> dict:
 @router.get(
     "/history/{peer_id}",
     summary="Conversation History",
-    description="Returns the last messages exchanged between the caller and a peer (in-memory).",
+    description="Returns the last messages exchanged between the caller and a peer (persisted + memory).",
 )
 async def get_history(
     peer_id: str,
@@ -212,9 +273,139 @@ async def get_history(
     limit: int = Query(50, ge=1, le=100),
 ) -> dict:
     key = _convo_key(user_id, peer_id)
-    messages = list(_history.get(key, []))
+    in_memory = list(_history.get(key, []))
+
+    # Query DB records
+    db_messages = []
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.db.models.message import Message
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Message)
+                .where(Message.conversation_id == key)
+                .order_by(Message.created_at.desc())
+                .limit(limit)
+            )
+            res = await session.execute(stmt)
+            rows = res.scalars().all()
+            for r in reversed(rows):
+                db_messages.append({
+                    "id": r.id,
+                    "from": r.sender_id,
+                    "from_name": r.sender_id,
+                    "to": r.receiver_id,
+                    "text": r.content,
+                    "timestamp": r.created_at.isoformat() if r.created_at else _now_iso(),
+                    "status": r.status,
+                    "delivered": r.status in ("SENT", "DELIVERED", "RECEIVED"),
+                })
+    except Exception as exc:
+        logger.warning("Failed querying DB history: %s", exc)
+
+    # Merge in-memory and DB messages (deduping by id)
+    seen_ids = set()
+    combined = []
+    for m in db_messages + in_memory:
+        mid = m.get("id")
+        if mid and mid not in seen_ids:
+            seen_ids.add(mid)
+            combined.append(m)
+
     return {
         "peer_id": peer_id,
-        "messages": messages[-limit:],
-        "total": len(messages),
+        "messages": combined[-limit:],
+        "total": len(combined),
     }
+
+
+@router.get(
+    "/contacts",
+    summary="List Employees for Messaging",
+    description="Returns employees belonging to the caller's organization with their Telegram connection status.",
+)
+async def list_contacts(user_id: Optional[str] = Query(None)) -> dict:
+    contacts = []
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.db.postgres import get_neon_session_maker
+        from app.modules.auth.models import User
+        from app.modules.roles.models import Role
+        from app.modules.organizations.models import OrganizationMember
+        from app.integrations.telegram.models import TelegramIdentity
+        from sqlalchemy import select, or_
+
+        # 1. Query TelegramIdentities from SQLite
+        tg_map = {}
+        try:
+            async with AsyncSessionLocal() as agent_session:
+                stmt_tg = select(TelegramIdentity)
+                res_tg = await agent_session.execute(stmt_tg)
+                tg_map = {tg.user_id: tg for tg in res_tg.scalars().all()}
+        except Exception as e:
+            logger.warning("Error reading telegram identities: %s", e)
+
+        # 2. Query Users isolated by Organization from Neon PostgreSQL
+        neon_maker = get_neon_session_maker()
+        identity_session_factory = neon_maker if neon_maker is not None else AsyncSessionLocal
+
+        async with identity_session_factory() as id_session:
+            target_user_id = None
+            if user_id:
+                clean_uid = user_id.strip()
+                res_u = await id_session.execute(
+                    select(User.id).where(
+                        or_(User.id == clean_uid, User.email.ilike(clean_uid), User.name.ilike(clean_uid))
+                    )
+                )
+                target_user_id = res_u.scalar_one_or_none()
+
+            org_ids = []
+            if target_user_id:
+                res_mem = await id_session.execute(
+                    select(OrganizationMember.organization_id).where(
+                        OrganizationMember.user_id == target_user_id
+                    )
+                )
+                org_ids = res_mem.scalars().all()
+
+            # Default to active organization
+            if not org_ids:
+                res_mem_default = await id_session.execute(
+                    select(OrganizationMember.organization_id).limit(1)
+                )
+                first_org = res_mem_default.scalar_one_or_none()
+                if first_org:
+                    org_ids = [first_org]
+
+            if org_ids:
+                stmt_users = (
+                    select(User)
+                    .join(OrganizationMember, User.id == OrganizationMember.user_id)
+                    .where(OrganizationMember.organization_id.in_(org_ids))
+                    .distinct()
+                )
+            else:
+                stmt_users = select(User)
+
+            res_users = await id_session.execute(stmt_users)
+            users = res_users.scalars().all()
+
+            for u in users:
+                tg = tg_map.get(u.id)
+                contacts.append({
+                    "user_id": u.id,
+                    "name": u.name,
+                    "email": u.email,
+                    "job_title": getattr(u, "job_title", None) or getattr(u, "role", "Employee"),
+                    "telegram_connected": tg is not None,
+                    "telegram_username": tg.telegram_username if tg else None,
+                })
+    except Exception as exc:
+        logger.exception("Error fetching contacts: %s", exc)
+
+    return {"contacts": contacts, "count": len(contacts)}
+
+
