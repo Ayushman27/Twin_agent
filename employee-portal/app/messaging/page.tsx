@@ -22,13 +22,15 @@ function formatTime(iso: string) {
   }
 }
 
-function initials(name: string) {
-  return name
-    .split(/[\s-_]/)
+function initials(name?: string | null) {
+  if (!name || typeof name !== "string") return "EP";
+  const parts = name.trim().split(/[\s-_]+/).filter(Boolean);
+  if (!parts.length) return "EP";
+  return parts
     .map((w) => w[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || "EP";
 }
 
 // ── Status badge ─────────────────────────────────────────────────────────────
