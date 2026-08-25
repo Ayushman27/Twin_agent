@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: "Agent Logs",    href: "/agents/activity",     icon: "terminal" },
   { label: "Knowledge",     href: "/knowledge",           icon: "database" },
   { label: "Integrations",  href: "/integrations",        icon: "cable" },
+  { label: "Messaging",     href: "/messaging",           icon: "chat_bubble_outline" },
   { label: "Analytics",     href: "/analytics",           icon: "bar_chart" },
 ];
 

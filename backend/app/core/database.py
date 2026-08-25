@@ -43,6 +43,7 @@ async def init_db() -> None:
     from app.modules.demo_agent.models import AgentSession, AgentMessage  # noqa: F401
     from app.modules.roles.models import Role, RoleCapability, EmployeeRoleAssignment  # noqa: F401
     from app.modules.teams.models import Team, TeamMember  # noqa: F401
+    from app.integrations.telegram.models import TelegramIdentity  # noqa: F401
     from app.db.postgres import get_neon_session_maker
     from app.core.security import hash_password
     from sqlalchemy import select
