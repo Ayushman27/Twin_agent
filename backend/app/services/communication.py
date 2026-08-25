@@ -163,6 +163,7 @@ class CommunicationService:
         content: str,
         channel: str = "telegram",
         sender_name: Optional[str] = None,
+        message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Sends a message to recipient over Telegram & records it in the database.
@@ -179,7 +180,7 @@ class CommunicationService:
 
         # 1. Create PENDING Message record
         msg = Message(
-            id=str(uuid.uuid4()),
+            id=message_id or str(uuid.uuid4()),
             conversation_id=convo_id,
             sender_id=sender_id,
             receiver_id=target_user_id,

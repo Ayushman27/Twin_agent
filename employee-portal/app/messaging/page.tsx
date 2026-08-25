@@ -13,8 +13,10 @@ const DEMO_USER_ID =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatTime(iso: string) {
+  if (!iso) return "";
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const str = iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z";
+    return new Date(str).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
@@ -205,26 +207,30 @@ export default function MessagingPage() {
     setSystemEvents((prev) => [...prev.slice(-19), `[${formatTime(new Date().toISOString())}] ${text}`]);
   }, []);
 
+  // Dynamic host determination for multi-device/laptop network support
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+
   // Fetch employee directory (isolated by organization)
   useEffect(() => {
     if (!myUserId) return;
-    fetch(`http://localhost:8000/api/v1/messaging/contacts?user_id=${encodeURIComponent(myUserId)}`)
+    fetch(`http://${host}:8000/api/v1/messaging/contacts?user_id=${encodeURIComponent(myUserId)}`)
       .then((res) => res.json())
       .then((data) => setDirectory(data.contacts || []))
       .catch(() => {});
-  }, [myUserId]);
+  }, [myUserId, host]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/telegram/status")
+    fetch(`http://${host}:8000/api/v1/telegram/status`)
       .then((res) => res.json())
       .then((data) => setTgStatus(data))
       .catch(() => setTgStatus(null));
-  }, []);
+  }, [host]);
 
   const { status, onlineUsers, messages, sendMessage, loadHistory, clearMessages } =
     useMessaging({
       userId: myUserId,
       displayName: myUserName,
+      wsBaseUrl: `ws://${host}:8000/api/v1/messaging`,
       onMessage: (msg) => {
         addEvent(`↙ Message from ${msg.from_name}`);
       },
@@ -546,7 +552,7 @@ export default function MessagingPage() {
         </div>
         <div className="px-3 py-2 border-t border-[#1a3a1a]">
           <p className="font-mono text-[9px] text-[#2a4a2a]">
-            ws://localhost:8000
+            ws://{host}:8000
           </p>
         </div>
       </aside>

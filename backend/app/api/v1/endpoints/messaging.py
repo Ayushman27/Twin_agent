@@ -43,7 +43,7 @@ def _convo_key(a: str, b: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 async def broadcast_message_event(payload: dict) -> None:
@@ -119,7 +119,25 @@ async def messaging_ws(
         except Exception:
             pass
 
+    # Store connection under user_id + resolve email/name aliases
     _connections[user_id] = websocket
+    try:
+        from app.db.postgres import get_neon_session_maker
+        from app.modules.auth.models import User
+        from sqlalchemy import select, or_
+        neon_maker = get_neon_session_maker()
+        identity_session_factory = neon_maker if neon_maker is not None else AsyncSessionLocal
+        async with identity_session_factory() as id_session:
+            r = await id_session.execute(select(User).where(or_(User.id == user_id, User.email == user_id, User.name == user_id)))
+            u = r.scalars().first()
+            if u:
+                _connections[u.id] = websocket
+                if u.email:
+                    _connections[u.email] = websocket
+                if u.name:
+                    _connections[u.name] = websocket
+    except Exception:
+        pass
 
     # Announce presence to everyone
     await _broadcast_presence(user_id, online=True)
@@ -127,7 +145,7 @@ async def messaging_ws(
     # Send current online list to the newly connected client
     await websocket.send_text(json.dumps({
         "type": "online_list",
-        "users": [uid for uid in _connections if uid != user_id],
+        "users": list(set(_connections.keys())),
         "timestamp": _now_iso(),
     }))
 
@@ -178,7 +196,7 @@ async def messaging_ws(
                 key = _convo_key(user_id, to_user)
                 _history[key].append(msg_payload)
 
-                # Persist to Database & forward to Telegram if target has Telegram connected
+                # Persist to Database & dispatch via CommunicationService
                 delivered_ws = False
                 delivered_tg = False
                 try:
@@ -188,42 +206,46 @@ async def messaging_ws(
 
                     async with AsyncSessionLocal() as session:
                         comm = CommunicationService(session)
-                        # Check Telegram
                         tg_res = await comm.send_message(
                             sender_id=user_id,
                             recipient_identifier=to_user,
                             content=text,
                             sender_name=display_name or user_id,
+                            message_id=msg_id,
                         )
                         if tg_res and tg_res.get("success"):
                             delivered_tg = True
                         else:
-                            # Save as standard WS message in DB
-                            db_msg = Message(
-                                id=msg_id,
-                                conversation_id=key,
-                                sender_id=user_id,
-                                receiver_id=to_user,
-                                channel="websocket",
-                                content=text,
-                                status="SENT",
-                            )
-                            session.add(db_msg)
-                            await session.commit()
+                            # If recipient is purely WS / not Telegram, persist DB record
+                            existing_db = await session.get(Message, msg_id)
+                            if not existing_db:
+                                db_msg = Message(
+                                    id=msg_id,
+                                    conversation_id=key,
+                                    sender_id=user_id,
+                                    receiver_id=to_user,
+                                    channel="websocket",
+                                    content=text,
+                                    status="SENT",
+                                )
+                                session.add(db_msg)
+                                await session.commit()
                 except Exception as exc:
                     logger.warning("DB/Telegram persistence error in WS message: %s", exc)
 
-                # Deliver to recipient if online via WS
+                # Deliver to recipient via WebSocket if online
                 recipient_ws = _connections.get(to_user)
                 if recipient_ws:
                     try:
-                        await recipient_ws.send_text(json.dumps(msg_payload))
+                        await recipient_ws.send_text(json.dumps({
+                            **msg_payload,
+                            "delivered": True,
+                        }))
                         delivered_ws = True
                     except Exception as exc:
                         logger.warning("Failed to deliver to %s: %s", to_user, exc)
-                        _connections.pop(to_user, None)
 
-                # Echo back to sender as confirmation
+                # Confirmation back to sender
                 await websocket.send_text(json.dumps({
                     **msg_payload,
                     "delivered": delivered_ws or delivered_tg,
@@ -313,13 +335,27 @@ async def get_history(
     except Exception as exc:
         logger.warning("Failed querying DB history: %s", exc)
 
-    # Merge in-memory and DB messages (deduping by id)
+    # Merge DB and in-memory messages with strict content-signature deduplication
     seen_ids = set()
+    seen_signatures = set()
     combined = []
-    for m in db_messages + in_memory:
+
+    # Process DB messages first (they are authoritative)
+    for m in db_messages:
         mid = m.get("id")
-        if mid and mid not in seen_ids:
+        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}"
+        if mid not in seen_ids and sig not in seen_signatures:
             seen_ids.add(mid)
+            seen_signatures.add(sig)
+            combined.append(m)
+
+    # Process in-memory messages if not already in DB
+    for m in in_memory:
+        mid = m.get("id")
+        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}"
+        if mid not in seen_ids and sig not in seen_signatures:
+            seen_ids.add(mid)
+            seen_signatures.add(sig)
             combined.append(m)
 
     return {

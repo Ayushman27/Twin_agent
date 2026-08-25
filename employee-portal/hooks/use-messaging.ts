@@ -39,7 +39,7 @@ interface UseMessagingOptions {
 export function useMessaging({
   userId,
   displayName,
-  wsBaseUrl = "ws://localhost:8000/api/v1/messaging",
+  wsBaseUrl,
   onMessage,
   onPresence,
   onStatusChange,
@@ -52,6 +52,11 @@ export function useMessaging({
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+
+  // Dynamic host determination for multi-device/laptop network support
+  const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const activeWsBase = wsBaseUrl || `ws://${host}:8000/api/v1/messaging`;
+  const activeApiBase = `http://${host}:8000/api/v1/messaging`;
 
   const updateStatus = useCallback(
     (s: WSStatus) => {
@@ -69,7 +74,7 @@ export function useMessaging({
     updateStatus("connecting");
 
     const params = new URLSearchParams({ display_name: displayName ?? userId });
-    const url = `${wsBaseUrl}/ws/${encodeURIComponent(userId)}?${params}`;
+    const url = `${activeWsBase}/ws/${encodeURIComponent(userId)}?${params}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -124,7 +129,13 @@ export function useMessaging({
             isSelf: data.from === userId,
             delivered: data.delivered,
           };
-          setMessages((prev) => [...prev, msg]);
+          setMessages((prev) => {
+            const exists = prev.some((m) => m.id === msg.id || (m.text === msg.text && m.from === msg.from && Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 3000));
+            if (exists) {
+              return prev.map((m) => (m.id === msg.id || (m.text === msg.text && m.from === msg.from) ? { ...m, ...msg } : m));
+            }
+            return [...prev, msg];
+          });
           onMessage?.(msg);
           return;
         }
@@ -152,7 +163,7 @@ export function useMessaging({
         if (mountedRef.current) connect();
       }, 3_000);
     };
-  }, [userId, displayName, wsBaseUrl, updateStatus, onMessage, onPresence]);
+  }, [userId, displayName, activeWsBase, updateStatus, onMessage, onPresence]);
 
   // ── Disconnect ───────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
@@ -187,7 +198,7 @@ export function useMessaging({
     async (peerId: string) => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/messaging/history/${peerId}?user_id=${encodeURIComponent(userId)}&limit=50`
+          `${activeApiBase}/history/${peerId}?user_id=${encodeURIComponent(userId)}&limit=50`
         );
         const data = await res.json();
         const history: ChatMessage[] = (data.messages ?? []).map((m: any) => ({
@@ -199,7 +210,7 @@ export function useMessaging({
         console.error("[Messaging] Failed to load history:", err);
       }
     },
-    [userId]
+    [userId, activeApiBase]
   );
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
