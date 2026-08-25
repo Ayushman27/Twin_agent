@@ -30,6 +30,8 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
   const isListeningRef = useRef(false);
   const sessionActiveRef = useRef(false);        // true after first Echo trigger
   const conversationHistory = useRef<ConversationTurn[]>([]); // persistent memory
+  const isAgentBusyRef = useRef(false);          // true while LLM fetching or TTS speaking
+  const resumeTimeoutRef = useRef<any>(null);
 
   const updateStatus = useCallback(
     (newStatus: "disconnected" | "connecting" | "connected" | "listening" | "speaking" | "session-active") => {
@@ -39,11 +41,56 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
     [onStatusChange]
   );
 
+  // ── Helper: Pause microphone recognition ─────────────────────────────────
+  const pauseRecognition = useCallback(() => {
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+        console.log("[Echo] 🔇 Mic turned off while agent is responding/speaking");
+      } catch (e) {}
+    }
+  }, []);
+
+  // ── Helper: Resume microphone recognition after agent finished speaking ──
+  const resumeRecognition = useCallback(() => {
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+    }
+    // 400ms buffer to let speaker audio and room reverberation completely settle
+    resumeTimeoutRef.current = setTimeout(() => {
+      isAgentBusyRef.current = false;
+      setIsSpeaking(false);
+      const nextStatus = isListeningRef.current
+        ? (sessionActiveRef.current ? "session-active" : "listening")
+        : "connected";
+      updateStatus(nextStatus);
+
+      if (isListeningRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+          console.log("[Echo] 🎙️ Mic resumed and listening for user input");
+        } catch (e) {
+          // May already be active
+        }
+      }
+    }, 400);
+  }, [updateStatus]);
+
   // ── Send text to LLM with conversation memory ─────────────────────────────
   const sendTextMessage = useCallback(
     async (text: string) => {
       const clean = text.trim();
       if (!clean) return;
+
+      // Turn OFF mic immediately while agent processes & speaks
+      isAgentBusyRef.current = true;
+      pauseRecognition();
+      setIsSpeaking(true);
+      updateStatus("speaking");
 
       console.log("[Echo] Sending to LLM:", clean);
       if (onTranscript) onTranscript("user", clean);
@@ -85,29 +132,40 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
           utterance.lang = "en-US";
           utterance.rate = 1.0;
           utterance.pitch = 1.0;
-          setIsSpeaking(true);
-          updateStatus("speaking");
 
           utterance.onend = () => {
-            setIsSpeaking(false);
-            updateStatus(isListeningRef.current
-              ? (sessionActiveRef.current ? "session-active" : "listening")
-              : "connected");
+            console.log("[Echo] Finished speaking reply");
+            resumeRecognition();
           };
+
+          utterance.onerror = (err) => {
+            console.warn("[Echo] Speech synthesis error:", err);
+            resumeRecognition();
+          };
+
           window.speechSynthesis.speak(utterance);
+        } else {
+          // If browser speech synthesis is unavailable, resume mic after reply
+          resumeRecognition();
         }
       } catch (err) {
         console.error("[Echo] LLM fetch error:", err);
+        resumeRecognition();
       }
     },
-    [onTranscript, updateStatus]
+    [onTranscript, updateStatus, pauseRecognition, resumeRecognition]
   );
 
   // ── End session (reset wake word gate) ───────────────────────────────────
   const endSession = useCallback(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     sessionActiveRef.current = false;
+    isAgentBusyRef.current = false;
     conversationHistory.current = [];
     setIsSessionActive(false);
+    setIsSpeaking(false);
     updateStatus(isListeningRef.current ? "listening" : "connected");
     console.log("[Echo] Session ended, memory cleared");
   }, [updateStatus]);
@@ -138,10 +196,18 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
       console.log("[Echo] SpeechRecognition started ✅");
       isListeningRef.current = true;
       setIsListening(true);
-      updateStatus(sessionActiveRef.current ? "session-active" : "listening");
+      if (!isAgentBusyRef.current) {
+        updateStatus(sessionActiveRef.current ? "session-active" : "listening");
+      }
     };
 
     recognition.onresult = (event: any) => {
+      // Ignore any speech captured while the agent is responding or speaking
+      if (isAgentBusyRef.current) {
+        console.log("[Echo] 🔇 Ignored speech captured while agent is speaking");
+        return;
+      }
+
       const result = event.results[event.resultIndex];
       if (!result || !result.isFinal) return;
 
@@ -180,18 +246,28 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
         console.error("[Echo] ❌ Mic permission denied");
         return;
       }
-      setTimeout(() => {
-        if (recognitionRef.current === recognition) {
-          try { recognition.start(); } catch (e) {}
-        }
-      }, 300);
+      if (!isAgentBusyRef.current && isListeningRef.current) {
+        setTimeout(() => {
+          if (!isAgentBusyRef.current && recognitionRef.current === recognition) {
+            try { recognition.start(); } catch (e) {}
+          }
+        }, 300);
+      }
     };
 
     recognition.onend = () => {
+      // If the agent is speaking or responding, DO NOT restart mic
+      if (isAgentBusyRef.current) {
+        console.log("[Echo] SpeechRecognition ended while agent responding (mic kept off)");
+        return;
+      }
+
       console.log("[Echo] SpeechRecognition ended, restarting...");
-      if (recognitionRef.current === recognition) {
+      if (isListeningRef.current && recognitionRef.current === recognition) {
         setTimeout(() => {
-          try { recognition.start(); } catch (e) {}
+          if (!isAgentBusyRef.current && isListeningRef.current && recognitionRef.current === recognition) {
+            try { recognition.start(); } catch (e) {}
+          }
         }, 100);
       }
     };
@@ -206,12 +282,17 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
 
   // ── Stop listening ────────────────────────────────────────────────────────
   const stopListening = useCallback(() => {
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = null;
+    }
     if (recognitionRef.current) {
       const r = recognitionRef.current;
       recognitionRef.current = null;
-      try { r.stop(); } catch (e) {}
+      try { r.abort(); } catch (e) {}
     }
     isListeningRef.current = false;
+    isAgentBusyRef.current = false;
     setIsListening(false);
     setIsUserSpeaking(false);
     updateStatus("connected");
@@ -231,10 +312,16 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (resumeTimeoutRef.current) {
+        clearTimeout(resumeTimeoutRef.current);
+      }
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       if (recognitionRef.current) {
         const r = recognitionRef.current;
         recognitionRef.current = null;
-        try { r.stop(); } catch (e) {}
+        try { r.abort(); } catch (e) {}
       }
     };
   }, []);

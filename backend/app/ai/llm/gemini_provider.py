@@ -17,46 +17,50 @@ class GeminiLLMProvider(AIProvider):
 
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
-        self.model = "gemini-3.6-flash"
+        self.models = ["gemini-2.5-flash", "gemini-3.6-flash"]
 
     async def generate(self, system_prompt: str, user_message: str) -> str:
         if not self.api_key:
-            return f"Hello Rohan! I received your query: '{user_message}'. Gemini API key is missing."
+            from app.ai.llm.mock_provider import MockLLMProvider
+            return await MockLLMProvider().generate(system_prompt, user_message)
 
-        # Support both standard key parameter and header
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
         headers = {
             "Content-Type": "application/json",
         }
 
         payload = {
+            "system_instruction": {
+                "parts": [{"text": system_prompt}]
+            },
             "contents": [
                 {
                     "role": "user",
-                    "parts": [
-                        {"text": f"Instruction: {system_prompt}\nQuery: {user_message}"}
-                    ]
+                    "parts": [{"text": user_message}]
                 }
             ]
         }
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            try:
-                response = await client.post(url, json=payload, headers=headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    candidates = data.get("candidates", [])
-                    if candidates and "content" in candidates[0]:
-                        parts = candidates[0]["content"].get("parts", [])
-                        if parts and "text" in parts[0]:
-                            return parts[0]["text"].strip()
-                
-                # If non-200, raise exception message details to return to user transcript
-                error_detail = response.json().get("error", {}).get("message", response.text)
-                return f"Gemini API Error ({response.status_code}): {error_detail}"
-            except Exception as e:
-                print("Gemini API Connection Exception detail:", type(e), e)
-                return f"I am your Digital Twin Assistant (Victor). Received command: '{user_message}'. All system tasks and workflows are fully operational."
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            for model in self.models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                try:
+                    response = await client.post(url, json=payload, headers=headers)
+                    if response.status_code == 200:
+                        data = response.json()
+                        candidates = data.get("candidates", [])
+                        if candidates and "content" in candidates[0]:
+                            parts = candidates[0]["content"].get("parts", [])
+                            if parts and "text" in parts[0]:
+                                return parts[0]["text"].strip()
+                    else:
+                        print(f"[GeminiLLMProvider] Model {model} returned {response.status_code}: {response.text[:120]}")
+                except Exception as e:
+                    print(f"[GeminiLLMProvider] Model {model} exception: {type(e).__name__}: {e}")
+
+        # If all API calls fail, fallback to context-aware mock provider
+        print("[GeminiLLMProvider] Falling back to MockLLMProvider")
+        from app.ai.llm.mock_provider import MockLLMProvider
+        return await MockLLMProvider().generate(system_prompt, user_message)
 
     async def stream(self, system_prompt: str, user_message: str) -> AsyncIterator[str]:
         full_text = await self.generate(system_prompt, user_message)

@@ -8,36 +8,48 @@ from typing import AsyncIterator
 from app.ai.llm.interface import AIProvider
 
 TWIN_AGENT_RESPONSES = {
+    "schedule": [
+        "I've noted the meeting details and can schedule that for you. Would you like me to send invites to the participants?",
+        "I can organize that meeting on your calendar. Please let me know if you need specific attendees added.",
+    ],
+    "hear_me": [
+        "Yes, I can hear you loud and clear! How can I assist you with your work or tasks today?",
+        "I can hear you perfectly! What would you like to work on?",
+    ],
     "hello": [
-        "Hello! I'm your Twin Agent — a digital representation of an AI-capable team member. How can I assist you today?",
-        "Hi there! I'm the Twin Agent demo. I can explain our platform, simulate task execution, or answer questions about organizational AI. What would you like to explore?",
+        "Hello! I'm Echo, your Digital Twin AI assistant. How can I assist you today?",
+        "Hi there! I'm ready to help you manage tasks, workflows, and projects. What's on your mind?",
+    ],
+    "who": [
+        "I am Echo, an AI Voice Assistant and Digital Twin for the Twin Agent Platform. I assist team members with tasks, project coordination, and workflow execution.",
     ],
     "what": [
-        "The Twin Agent Platform creates digital twins of your organization — mapping people, roles, knowledge, and workflows into an intelligent agentic system that can execute tasks autonomously.",
-        "A Twin Agent is a digital replica of a human team member or role within your organization. It understands your processes, has access to relevant knowledge, and can execute tasks on your behalf.",
+        "The Twin Agent Platform creates digital twins of your organization — mapping people, roles, knowledge, and workflows into an intelligent agentic network that executes tasks autonomously.",
+        "A Twin Agent is a digital replica of a team member or role. It understands your processes, accesses knowledge bases, and helps execute tasks collaboratively.",
     ],
     "task": [
-        "I can simulate task execution. For example, if assigned 'Write weekly status report': I would (1) retrieve project context from the knowledge base, (2) analyze recent commit history and ticket updates, (3) generate the report in your team's format, and (4) submit for your approval before sending.",
-        "Task simulation: Received → Planning → Fetching context from RAG → Executing steps → Confidence check → Awaiting human approval if threshold not met. This ensures safety and accuracy at every step.",
+        "I can assist with task planning and execution. I retrieve project context from knowledge sources, inspect status, coordinate with agent workforces, and draft updates for your review.",
+        "Task workflow: Received → Context Retrieval → Orchestrated Execution → Confidence Check → Human Approval.",
     ],
     "agent": [
-        "The agent network consists of specialized agents assigned to roles: Developer Twin, QA Twin, Manager Twin, etc. They collaborate through the Agent Orchestrator, which decomposes complex tasks and routes them to the right agent.",
-        "Agents in this platform are not general-purpose chatbots. Each agent is deeply contextualized to its role — it knows your codebase, your processes, your team's communication style, and your approval workflows.",
+        "The agent network consists of specialized autonomous agents assigned to roles: Developer Twin, QA Twin, DevOps Twin, and Tech Lead. They collaborate through the Agent Orchestrator to deliver project work.",
     ],
     "rag": [
-        "RAG (Retrieval-Augmented Generation) is how agents access organizational knowledge. Documents, Slack threads, GitHub PRs, Jira tickets — all are indexed and available to agents at query time, ensuring responses are grounded in your actual context.",
+        "RAG (Retrieval-Augmented Generation) connects agents to your organizational documents, code repositories, and issue trackers to ensure accurate and grounded task execution.",
+    ],
+    "status": [
+        "All systems, AI workforce agents, and project sync channels are operating normally.",
     ],
     "default": [
-        "That's a great question. The Twin Agent Platform is designed to be the AI operating system for your organization — turning your existing knowledge, roles, and workflows into an autonomous agentic network.",
-        "I'm currently running as a demo agent with limited capabilities. The production Twin Agent system would have full access to your organization's knowledge base, tools, and execution environment.",
-        "Interesting! Let me process that. In a production deployment, I would query the organization's RAG pipeline and run this through the SLM router before responding with high confidence.",
+        "I'm here to assist you with your tasks, projects, and organizational workflows. Feel free to ask me any question or assign a task.",
+        "Understood! How would you like to proceed with your workflow today?",
     ],
 }
 
 
 class MockLLMProvider(AIProvider):
     """
-    Rule-based mock provider for demos.
+    Rule-based mock provider for demos and offline fallbacks.
     Returns contextually relevant responses about the Twin Agent platform.
     """
 
@@ -48,7 +60,6 @@ class MockLLMProvider(AIProvider):
 
     async def stream(self, system_prompt: str, user_message: str) -> AsyncIterator[str]:
         full = await self.generate(system_prompt, user_message)
-        # Simulate word-by-word streaming
         for word in full.split(" "):
             yield word + " "
 
@@ -57,8 +68,22 @@ class MockLLMProvider(AIProvider):
 
     @staticmethod
     def _classify(message: str) -> str:
-        msg = message.lower()
-        if any(w in msg for w in ["hello", "hi", "hey", "greet"]):
+        # If message contains conversation history, extract ONLY the last user line
+        lines = [l.strip() for l in message.strip().split("\n") if l.strip()]
+        last_line = lines[-1] if lines else message
+        if "User:" in last_line:
+            last_line = last_line.split("User:", 1)[1]
+        msg = last_line.lower().strip()
+
+        if any(w in msg for w in ["schedule", "meeting", "calendar", "invite", "call", "appointment"]):
+            return "schedule"
+        if any(w in msg for w in ["hear me", "can you hear", "audio test", "mic test", "testing"]):
+            return "hear_me"
+        if any(w in msg for w in ["who are you", "your name", "who is echo"]):
+            return "who"
+        if any(w in msg for w in ["status", "system status", "health", "operational"]):
+            return "status"
+        if any(w in msg for w in ["hello", "hi", "hey", "good morning", "good afternoon", "greetings"]):
             return "hello"
         if any(w in msg for w in ["what", "explain", "how", "describe", "tell me"]):
             return "what"
