@@ -6,6 +6,8 @@ export const WAKE_WORD = "Echo";
 
 export interface GeminiLiveOptions {
   wsUrl?: string;
+  userId?: string;
+  userName?: string;
   onTranscript?: (sender: "user" | "ai", text: string) => void;
   onAudioVolumeChange?: (level: number) => void;
   onStatusChange?: (status: "disconnected" | "connecting" | "connected" | "listening" | "speaking" | "session-active") => void;
@@ -17,7 +19,7 @@ interface ConversationTurn {
 }
 
 export function useGeminiLive(options: GeminiLiveOptions = {}) {
-  const { onTranscript, onStatusChange } = options;
+  const { onTranscript, onStatusChange, userId, userName } = options;
 
   const [isConnected, setIsConnected] = useState(true);
   const [isListening, setIsListening] = useState(false);
@@ -99,12 +101,15 @@ export function useGeminiLive(options: GeminiLiveOptions = {}) {
       conversationHistory.current.push({ role: "user", content: clean });
 
       try {
-        const res = await fetch("http://localhost:8000/api/v1/demo-agent/execute", {
+        const host = typeof window !== "undefined" ? window.location.hostname : "localhost";
+        const res = await fetch(`http://${host}:8000/api/v1/demo-agent/execute`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: clean,
             history: conversationHistory.current.slice(0, -1), // send prior context, not current
+            user_id: userId,
+            user_name: userName,
           }),
         });
         const data = await res.json();

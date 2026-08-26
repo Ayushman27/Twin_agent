@@ -239,6 +239,8 @@ export default function HomePage() {
   };
 
   const geminiLive = useGeminiLive({
+    userId: user?.id,
+    userName: user?.name,
     onTranscript: (sender, text) => {
       addMessage(sender, text, true);
     },

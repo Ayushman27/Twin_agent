@@ -86,11 +86,12 @@ async def run_diagnostics():
 
         # 3. Test Recipient Resolution for unlinked user
         res_unlinked = await comm.resolve_recipient("Priya")
-        print("\n--- TEST 2: Recipient Resolution (Unlinked) ---")
+        print("\n--- TEST 2: Recipient Resolution (Unlinked User on Platform) ---")
         print(f"Result: {res_unlinked}")
-        assert res_unlinked["success"] is False
-        assert res_unlinked["error_code"] == "TELEGRAM_NOT_CONNECTED"
-        print("[OK] Correctly rejected unlinked recipient 'Priya' with TELEGRAM_NOT_CONNECTED")
+        assert res_unlinked["success"] is True
+        assert res_unlinked["telegram_connected"] is False
+        assert res_unlinked["chat_id"] is None
+        print("[OK] Resolved unlinked platform recipient 'Priya' (telegram_connected: False)")
 
         # 4. Test Recipient Resolution for unknown user
         res_unknown = await comm.resolve_recipient("NonExistentUser123")
@@ -100,17 +101,32 @@ async def run_diagnostics():
         assert res_unknown["error_code"] == "RECIPIENT_NOT_FOUND"
         print("[OK] Correctly handled unknown recipient with RECIPIENT_NOT_FOUND")
 
-        # 5. Test Voice Agent Tool Trigger (Unlinked User)
-        print("\n--- TEST 4: Voice Agent Messaging Command (Unlinked User) ---")
+        # 5. Test Voice Agent Tool Trigger (User's Exact Spoken Query)
+        print("\n--- TEST 4: Voice Agent Exact Prompt Test ---")
+        voice_res_exact = await execute_voice_prompt({
+            "prompt": 'send msg to rahul "hello" using twin agent platform.',
+            "user_id": "emp_priya_456",
+            "user_name": "Priya Patel",
+        })
+        print(f"Voice Response: {voice_res_exact}")
+        assert voice_res_exact.get("tool_executed") == "telegram_messaging"
+        assert "Rahul Sharma" in voice_res_exact["response"]
+        print("[OK] Voice Agent correctly parsed 'send msg to rahul \"hello\" using twin agent platform.' and sent message!")
+
+        # 6. Test Voice Agent Tool Trigger (Unlinked User)
+        print("\n--- TEST 5: Voice Agent Messaging Command (Unlinked User) ---")
         voice_res_unlinked = await execute_voice_prompt({
-            "prompt": "Send a message to Priya saying I will send the designs soon"
+            "prompt": "Send a message to Priya saying I will send the designs soon",
+            "user_id": "emp_rahul_123",
+            "user_name": "Rahul Sharma",
         })
         print(f"Voice Response: {voice_res_unlinked}")
-        assert "not connected to Telegram" in voice_res_unlinked["response"]
-        print("[OK] Voice Agent accurately spoke: 'Priya is not connected to Telegram.'")
+        assert voice_res_unlinked.get("tool_executed") == "telegram_messaging"
+        assert "Twin Agent Platform" in voice_res_unlinked["response"]
+        print("[OK] Voice Agent accurately spoke: 'I have sent the message ... to Priya Patel on the Twin Agent Platform.'")
 
-        # 6. Test Voice Agent Messaging Command (Unknown User)
-        print("\n--- TEST 5: Voice Agent Messaging Command (Unknown User) ---")
+        # 7. Test Voice Agent Messaging Command (Unknown User)
+        print("\n--- TEST 6: Voice Agent Messaging Command (Unknown User) ---")
         voice_res_unknown = await execute_voice_prompt({
             "prompt": "Send a message to NonExistentUser saying Hello"
         })
