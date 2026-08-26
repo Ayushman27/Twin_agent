@@ -135,6 +135,32 @@ async def init_db() -> None:
                 )
                 session.add(unaffil)
 
+            # Check Shreyasi Panigrahy user
+            res_shreyasi = await session.execute(select(User).where(User.email == "shreyasi@company.ai"))
+            shreyasi = res_shreyasi.scalar_one_or_none()
+            if not shreyasi:
+                shreyasi = User(
+                    name="Shreyasi Panigrahy",
+                    email="shreyasi@company.ai",
+                    password_hash=hash_password("SecureEmployee1"),
+                    role=UserRole.EMPLOYEE,
+                    job_title="Technical Lead & AI Researcher",
+                    is_active=True,
+                )
+                session.add(shreyasi)
+                await session.flush()
+
+                res_org = await session.execute(select(Organization).limit(1))
+                existing_org = res_org.scalar_one_or_none()
+                if existing_org:
+                    shreyasi_member = OrganizationMember(
+                        organization_id=existing_org.id,
+                        user_id=shreyasi.id,
+                        role="EMPLOYEE",
+                        status=MemberStatus.ACTIVE,
+                    )
+                    session.add(shreyasi_member)
+
             await session.commit()
     except Exception:
         # Non-blocking if table is locked or in concurrent test mode

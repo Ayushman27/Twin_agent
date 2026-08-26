@@ -87,6 +87,27 @@ class CommunicationService:
                 res_local = await self.db.execute(stmt)
                 users = res_local.scalars().all()
 
+            # If full name search yielded no match, fallback to first-name search (e.g. 'Shreyasi' from 'Shreyasi Panigrahi')
+            if not users and " " in clean:
+                first_name = clean.split()[0].strip()
+                if len(first_name) >= 3:
+                    stmt_fn = select(User).where(User.name.ilike(f"%{first_name}%"))
+                    res_fn = await id_session.execute(stmt_fn)
+                    users = res_fn.scalars().all()
+                    if not users:
+                        res_fn_local = await self.db.execute(stmt_fn)
+                        users = res_fn_local.scalars().all()
+
+            # If still no match, fallback to prefix search (e.g. 'Shre' prefix)
+            if not users and len(clean) >= 3:
+                prefix = clean[:4] if len(clean) >= 4 else clean
+                stmt_pref = select(User).where(User.name.ilike(f"%{prefix}%"))
+                res_pref = await id_session.execute(stmt_pref)
+                users = res_pref.scalars().all()
+                if not users:
+                    res_pref_local = await self.db.execute(stmt_pref)
+                    users = res_pref_local.scalars().all()
+
             # If no direct user match in DB, check TelegramIdentity by username or chat_id
             if not users:
                 stmt_tg = select(TelegramIdentity).where(

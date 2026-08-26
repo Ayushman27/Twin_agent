@@ -40,6 +40,10 @@ TWIN_AGENT_RESPONSES = {
     "status": [
         "All systems, AI workforce agents, and project sync channels are operating normally.",
     ],
+    "messaging": [
+        "I can send messages to team members via Telegram and the Twin Agent Platform. Who would you like to message?",
+        "I'm ready to dispatch that message across your organization's messaging channels.",
+    ],
     "default": [
         "I'm here to assist you with your tasks, projects, and organizational workflows. Feel free to ask me any question or assign a task.",
         "Understood! How would you like to proceed with your workflow today?",
@@ -54,6 +58,16 @@ class MockLLMProvider(AIProvider):
     """
 
     async def generate(self, system_prompt: str, user_message: str) -> str:
+        if "JSON parameter extraction" in system_prompt or "Return ONLY a JSON object" in system_prompt:
+            # Fallback JSON response for intent extraction when LLM API key is not configured
+            msg_lower = user_message.lower()
+            if any(k in msg_lower for k in ["send", "message", "msg", "tell"]):
+                # Extract potential name after 'to' or 'tell' or 'message'
+                m_name = re.search(r"(?:to|tell|message)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
+                rec = m_name.group(1) if m_name else None
+                return json.dumps({"is_messaging": True, "recipient": rec, "text": None})
+            return json.dumps({"is_messaging": False, "recipient": None, "text": None})
+
         key = self._classify(user_message)
         responses = TWIN_AGENT_RESPONSES.get(key, TWIN_AGENT_RESPONSES["default"])
         return random.choice(responses)
@@ -75,6 +89,8 @@ class MockLLMProvider(AIProvider):
             last_line = last_line.split("User:", 1)[1]
         msg = last_line.lower().strip()
 
+        if any(w in msg for w in ["send", "message", "msg", "telegram", "tell", "notify"]):
+            return "messaging"
         if any(w in msg for w in ["schedule", "meeting", "calendar", "invite", "call", "appointment"]):
             return "schedule"
         if any(w in msg for w in ["hear me", "can you hear", "audio test", "mic test", "testing"]):
@@ -85,7 +101,7 @@ class MockLLMProvider(AIProvider):
             return "status"
         if any(w in msg for w in ["hello", "hi", "hey", "good morning", "good afternoon", "greetings"]):
             return "hello"
-        if any(w in msg for w in ["what", "explain", "how", "describe", "tell me"]):
+        if any(w in msg for w in ["what", "explain", "how", "describe"]):
             return "what"
         if any(w in msg for w in ["task", "execute", "run", "do", "assign", "complete"]):
             return "task"
@@ -94,3 +110,4 @@ class MockLLMProvider(AIProvider):
         if any(w in msg for w in ["rag", "knowledge", "document", "retriev"]):
             return "rag"
         return "default"
+

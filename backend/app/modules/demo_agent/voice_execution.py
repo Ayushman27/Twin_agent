@@ -10,14 +10,46 @@ from app.modules.auth.models import User
 
 router = APIRouter()
 
-# Patterns matching messaging intent in natural spoken language
-MSG_PATTERNS = [
-    re.compile(r"send\s+(?:a\s+)?(?:msg|message)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
-    re.compile(r"send\s+(?:a\s+)?(?:msg|message)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
-    re.compile(r"send\s+(?:a\s+)?(?:msg|message)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?P<text>.+)", re.IGNORECASE),
-    re.compile(r"tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:that|saying|:)\s+(?P<text>.+)", re.IGNORECASE),
-    re.compile(r"message\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
-    re.compile(r"message\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+# Speech recognition noise artifacts to strip from prompt start
+LEADING_NOISE_RE = re.compile(
+    r"^(?:new|hey|echo|eco|eko|can\s+you|could\s+you|please|so|okay|ok|i\s+want\s+to|i'd\s+like\s+to|kindly)\s+",
+    re.IGNORECASE
+)
+
+# 1. Full intent patterns (Recipient + Text / Greeting)
+MSG_FULL_PATTERNS = [
+    # send a hi/hello to [recipient]
+    re.compile(r"^send\s+(?:a\s+)?(?P<text>hi|hello|hey|greeting|greetings|update)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    # say hi/hello to [recipient]
+    re.compile(r"^say\s+(?P<text>hi|hello|hey)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    # send a message/msg/note/text to [recipient] saying/that/: [text]
+    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
+    # send a message/msg/note/text to [recipient] "text"
+    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # send a message/msg/note/text to [recipient] to [text]
+    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+to\s+(?P<text>.+)", re.IGNORECASE),
+    # send [recipient] a message/msg/note/text/hi/hello saying/that/: "text"
+    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:a\s+)?(?:msg|message|note|text|hi|hello)\s+(?:saying|that|:|\"|')\s*(?P<text>.+)", re.IGNORECASE),
+    # tell [recipient] that/saying/: [text]
+    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:that|saying|:)\s+(?P<text>.+)", re.IGNORECASE),
+    # message/text [recipient] saying/that/: "text"
+    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
+    # message/text [recipient] "text"
+    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+]
+
+# 2. Generic intent pattern (User wants to message someone, but gave no name yet)
+GENERIC_MSG_PATTERNS = [
+    re.compile(r"^(?:i\s+want\s+to\s+)?send\s+(?:a\s+)?(?:msg|message|text)$", re.IGNORECASE),
+    re.compile(r"^(?:i\s+want\s+to\s+)?message\s+(?:someone|anyone)$", re.IGNORECASE),
+]
+
+# 3. Recipient ONLY patterns (when message text is omitted)
+RECIPIENT_ONLY_PATTERNS = [
+    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:a\s+)?(?:msg|message|note|text)$", re.IGNORECASE),
+    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
 ]
 
 TRAILING_PHRASES = [
@@ -31,12 +63,14 @@ TRAILING_PHRASES = [
     r"\s+through\s+(?:the\s+)?twin\s+agent.*$",
 ]
 
-
-LEADING_NOISE = [
-    r"^(?:sender|send\s+(?:her|him|them))\s+(?:just\s+)?",
-    r"^(?:just|saying|that)\s+",
-]
-
+def _clean_prompt(prompt: str) -> str:
+    cleaned = (prompt or "").strip()
+    while True:
+        m = LEADING_NOISE_RE.match(cleaned)
+        if not m:
+            break
+        cleaned = cleaned[m.end():].strip()
+    return cleaned
 
 def _clean_extracted_text(text: str) -> str:
     if not text:
@@ -44,8 +78,6 @@ def _clean_extracted_text(text: str) -> str:
     cleaned = text.strip()
     for tp in TRAILING_PHRASES:
         cleaned = re.sub(tp, "", cleaned, flags=re.IGNORECASE)
-    for ln in LEADING_NOISE:
-        cleaned = re.sub(ln, "", cleaned, flags=re.IGNORECASE)
     cleaned = cleaned.strip("\"' ")
     return cleaned
 
@@ -55,9 +87,43 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
     Parses prompt and conversation history to determine if a message should be sent,
     extracting recipient and text across single or multi-turn spoken dialogue.
     """
-    # 1. Direct Regex check on current prompt
-    for pat in MSG_PATTERNS:
-        match = pat.search(prompt)
+    clean_p = _clean_prompt(prompt)
+
+    # 1. Multi-turn dialogue state matching
+    if history:
+        last_assistant_msg = ""
+        for item in reversed(history):
+            if item.get("role") == "assistant":
+                last_assistant_msg = item.get("content", "")
+                break
+
+        # State A: Assistant previously asked "Who would you like to message?" or similar
+        if any(phrase.lower() in last_assistant_msg.lower() for phrase in [
+            "who would you like to message",
+            "who would you like me to send",
+            "who should i send",
+            "ready to dispatch",
+            "specify the recipient",
+            "who would you like to text",
+        ]):
+            rec_candidate = _clean_extracted_text(clean_p)
+            if rec_candidate and len(rec_candidate.split()) <= 4:
+                return {"is_messaging": True, "recipient": rec_candidate, "text": None}
+
+        # State B: Assistant asked "What message would you like me to send to [Name]?" or "Got it, [Name]."
+        m_pending = re.search(r"Got\s+it,\s+(?P<rec>[\w\s\.-]+?)\.", last_assistant_msg, re.IGNORECASE)
+        if not m_pending:
+            m_pending = re.search(r"send\s+to\s+(?P<rec>[\w\s\.-]+?)(?:\?|\.|$)", last_assistant_msg, re.IGNORECASE)
+
+        if m_pending:
+            rec_name = m_pending.group("rec").strip()
+            msg_text = _clean_extracted_text(clean_p)
+            if rec_name and msg_text:
+                return {"is_messaging": True, "recipient": rec_name, "text": msg_text}
+
+    # 2. Match Full Recipient + Text / Greeting (e.g., "send a hi to Shreyasi Panigrahi")
+    for pat in MSG_FULL_PATTERNS:
+        match = pat.search(clean_p)
         if match:
             rec = match.group("recipient").strip()
             raw_text = match.group("text").strip()
@@ -65,7 +131,20 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
             if rec and cleaned_txt:
                 return {"is_messaging": True, "recipient": rec, "text": cleaned_txt}
 
-    # 2. Check multi-turn conversation history for pending recipient
+    # 3. Match Generic "I want to send a message"
+    for pat in GENERIC_MSG_PATTERNS:
+        if pat.search(clean_p):
+            return {"is_messaging": True, "recipient": None, "text": None}
+
+    # 4. Match Recipient ONLY (e.g., "send a message to Shreyasi Panigrahi")
+    for pat in RECIPIENT_ONLY_PATTERNS:
+        match = pat.search(clean_p)
+        if match:
+            rec = match.group("recipient").strip()
+            if rec:
+                return {"is_messaging": True, "recipient": rec, "text": None}
+
+    # 3. Check multi-turn conversation history for pending recipient
     if history:
         for item in reversed(history):
             content = item.get("content", "")
@@ -89,7 +168,7 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
                 if rec_name and rec_name.lower() not in ["her", "him", "them"] and cleaned_txt:
                     return {"is_messaging": True, "recipient": rec_name, "text": cleaned_txt}
 
-    # 3. LLM Extraction using History + Current Prompt
+    # 4. LLM Extraction using History + Current Prompt
     try:
         llm = get_ai_provider()
         history_str = ""
