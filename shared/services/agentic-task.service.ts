@@ -44,6 +44,19 @@ export interface ActionRecord {
   retry_number: number;
 }
 
+export interface AgentMemoryItem {
+  id?: string;
+  employee_id?: string;
+  organization_id?: string;
+  role: string;
+  key: string;
+  content: string;
+  memory_type: "TASK_LEARNING" | "USER_PREFERENCE" | "CODE_PATTERN" | "ORG_GUIDELINE" | string;
+  source_task_id?: string;
+  created_at?: string;
+  relevance_score?: number;
+}
+
 export interface ExecutionRecord {
   id: string;
   task_id: string;
@@ -68,6 +81,7 @@ export interface ExecutionRecord {
   created_at?: string;
   updated_at?: string;
   actions?: ActionRecord[];
+  memories?: AgentMemoryItem[];
 }
 
 export interface ExecutionResponse {
@@ -89,6 +103,7 @@ export interface ExecutionResponse {
   verification_result?: VerificationResult;
   retry_count: number;
   actions: ActionRecord[];
+  memories?: AgentMemoryItem[];
 }
 
 export interface ExecuteTaskPayload {
@@ -107,6 +122,15 @@ export interface AssignTaskPayload {
   role?: string;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   auto_execute?: boolean;
+}
+
+export interface CreateMemoryPayload {
+  key: string;
+  content: string;
+  memory_type?: string;
+  role?: string;
+  employee_id?: string;
+  organization_id?: string;
 }
 
 export const agenticTaskService = {
@@ -144,5 +168,19 @@ export const agenticTaskService = {
 
   async listTaskExecutions(taskId: string): Promise<any[]> {
     return apiClient.get<any[]>(`/agentic/tasks/${taskId}/executions`);
+  },
+
+  async listMemories(employeeId?: string, organizationId?: string): Promise<AgentMemoryItem[]> {
+    let url = "/agentic/memory";
+    const params = new URLSearchParams();
+    if (employeeId) params.append("employee_id", employeeId);
+    if (organizationId) params.append("organization_id", organizationId);
+    const queryString = params.toString();
+    if (queryString) url += `?${queryString}`;
+    return apiClient.get<AgentMemoryItem[]>(url);
+  },
+
+  async createMemory(payload: CreateMemoryPayload): Promise<AgentMemoryItem> {
+    return apiClient.post<AgentMemoryItem>("/agentic/memory", payload);
   },
 };

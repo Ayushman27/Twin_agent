@@ -126,6 +126,24 @@ class AgenticTaskOrchestrator:
                     state.status = WorkflowStatus.COMPLETED
                     break
 
+            # Auto-persist newly acquired execution learning to Agent Memory
+            if state.status == WorkflowStatus.COMPLETED:
+                try:
+                    from app.agentic.workflow.memory_service import memory_service
+                    short_task = state.original_task[:80]
+                    learning_content = f"Resolved task '{short_task}' under {state.role} standards. Plan: {len(state.plan.steps) if state.plan else 1} steps, QA score: {state.verification.score if state.verification else 100}%."
+                    await memory_service.store_memory(
+                        employee_id=state.employee_id,
+                        organization_id=state.organization_id,
+                        role=state.role,
+                        key=f"Execution Takeaway: {short_task}",
+                        content=learning_content,
+                        source_task_id=state.task_id,
+                        memory_type="TASK_LEARNING"
+                    )
+                except Exception as mem_err:
+                    print(f"[Orchestrator] Memory save warning: {mem_err}")
+
         except Exception as err:
             state.status = WorkflowStatus.FAILED
             await recorder.record_action(

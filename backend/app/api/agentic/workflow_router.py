@@ -111,6 +111,7 @@ class ExecutionResponse(BaseModel):
     verification_result: Optional[Dict[str, Any]] = None
     retry_count: int
     actions: List[Dict[str, Any]] = Field(default_factory=list)
+    memories: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post("/tasks/execute", response_model=ExecutionResponse, status_code=status.HTTP_200_OK)
@@ -137,9 +138,7 @@ async def execute_task_agentic(
         max_retries=payload.max_retries or 1,
     )
 
-    # Fetch recorded logs
-    recorder = ActionRecorder(db=db)
-    # Search DB for created execution record ID
+    # Fetch recorded logs and execution ID
     res = await db.execute(
         select(AgentTaskExecution)
         .where(AgentTaskExecution.task_id == task_id)
@@ -175,6 +174,7 @@ async def execute_task_agentic(
         verification_result=final_state.verification.model_dump() if final_state.verification else None,
         retry_count=final_state.retry_count,
         actions=actions_data,
+        memories=final_state.recalled_memories,
     )
 
 
@@ -317,3 +317,50 @@ async def list_task_executions(
         }
         for e in executions
     ]
+
+
+@router.get("/memory", response_model=List[Dict[str, Any]])
+async def list_agent_memories(
+    employee_id: Optional[str] = None,
+    organization_id: Optional[str] = None,
+    limit: int = 50,
+    user: Optional[Any] = Depends(get_optional_user),
+):
+    """
+    Retrieve stored persistent memories and learned takeaways for the Digital Twin.
+    """
+    from app.agentic.workflow.memory_service import memory_service
+    emp_id = employee_id or (str(user.id) if user else None)
+    org_id = organization_id or (getattr(user, "organization_id", None) if user else None)
+    return await memory_service.list_all_memories(employee_id=emp_id, organization_id=org_id, limit=limit)
+
+
+class CreateMemoryPayload(BaseModel):
+    key: str = Field(..., description="Key identifier for memory")
+    content: str = Field(..., description="Content of memory or learned pattern")
+    memory_type: Optional[str] = "USER_PREFERENCE"
+    role: Optional[str] = "Software Engineer"
+    employee_id: Optional[str] = None
+    organization_id: Optional[str] = None
+
+
+@router.post("/memory", response_model=Dict[str, Any], status_code=status.HTTP_201_CREATED)
+async def create_agent_memory(
+    payload: CreateMemoryPayload,
+    user: Optional[Any] = Depends(get_optional_user),
+):
+    """
+    Explicitly stores a user preference or guideline into the Twin's long-term memory.
+    """
+    from app.agentic.workflow.memory_service import memory_service
+    emp_id = payload.employee_id or (str(user.id) if user else "emp-default-01")
+    org_id = payload.organization_id or (getattr(user, "organization_id", None) or "org-default-01")
+
+    return await memory_service.store_memory(
+        employee_id=emp_id,
+        organization_id=org_id,
+        role=payload.role or "Software Engineer",
+        key=payload.key,
+        content=payload.content,
+        memory_type=payload.memory_type or "USER_PREFERENCE",
+    )

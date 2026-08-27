@@ -198,3 +198,18 @@ class AgentActionLog(UUIDMixin, TimestampMixin, Base):
     retry_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     execution: Mapped["AgentTaskExecution"] = relationship("AgentTaskExecution", back_populates="action_logs")
+
+
+class AgentMemory(UUIDMixin, TimestampMixin, Base):
+    """Persistent long-term and working memory store for employee digital twins."""
+    __tablename__ = "agent_memories"
+
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(100), nullable=False, default="EMPLOYEE")
+    
+    memory_type: Mapped[str] = mapped_column(String(50), nullable=False, default="TASK_LEARNING") # TASK_LEARNING, USER_PREFERENCE, CODE_PATTERN, ORG_GUIDELINE
+    key: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_task_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    relevance_score: Mapped[float] = mapped_column(Float, default=1.0)

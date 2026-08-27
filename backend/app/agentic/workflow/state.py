@@ -71,6 +71,8 @@ class AgentState(BaseModel):
     
     employee_context: Dict[str, Any] = Field(default_factory=dict)
     role_context: Dict[str, Any] = Field(default_factory=dict)
+    memories: List[Dict[str, Any]] = Field(default_factory=list)
+    recalled_memories: List[Dict[str, Any]] = Field(default_factory=list)
     
     plan: Optional[TaskPlan] = None
     research_results: Optional[ResearchResult] = None

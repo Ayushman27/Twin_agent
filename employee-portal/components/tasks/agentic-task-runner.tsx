@@ -20,6 +20,11 @@ import {
   ListOrdered,
   ArrowUpRight,
   Database,
+  Brain,
+  Layers,
+  Code2,
+  Cpu,
+  BookOpen,
 } from "lucide-react";
 import {
   agenticTaskService,
@@ -28,10 +33,61 @@ import {
 } from "@/services/agentic-task.service";
 import { useAuth } from "@/hooks/use-auth";
 
-const PRESET_TASKS = [
-  "Analyze database connection timeout spikes and generate mitigation plan",
-  "Research and draft OpenAPI specification for employee document upload webhook",
-  "Audit role-based authorization rules for multi-tenant isolation in API v1",
+const ROLE_OPTIONS = [
+  {
+    role: "Software Engineer",
+    icon: "💻",
+    presets: [
+      "Analyze database connection timeout spikes and generate mitigation plan with SQL indexes",
+      "Draft OpenAPI specification and Pydantic schemas for document upload webhook",
+      "Audit role-based authorization rules for multi-tenant isolation in API v1"
+    ]
+  },
+  {
+    role: "QA Engineer",
+    icon: "🧪",
+    presets: [
+      "Design end-to-end regression test suite and assertions for employee auth session flow",
+      "Generate boundary test cases for concurrent token refresh and rate limiting",
+      "Construct API load testing plan and error rate threshold matrix"
+    ]
+  },
+  {
+    role: "DevOps Engineer",
+    icon: "🚀",
+    presets: [
+      "Architect multi-stage hardened Dockerfile and Kubernetes deployment manifests",
+      "Set up Prometheus metrics and Grafana alerting thresholds for 5xx latency spikes",
+      "Construct zero-downtime rolling deployment pipeline in GitHub Actions"
+    ]
+  },
+  {
+    role: "Product Manager",
+    icon: "📋",
+    presets: [
+      "Author comprehensive PRD for AI Digital Twin multi-agent work queue",
+      "Formulate user stories with Given/When/Then acceptance criteria for task assignment",
+      "Establish product launch milestone roadmap and success KPI tracking matrix"
+    ]
+  },
+  {
+    role: "Security Engineer",
+    icon: "🛡️",
+    presets: [
+      "Conduct threat model analysis for JWT token storage and cross-site scripting attack surface",
+      "Audit role permissions and enforce least-privilege RBAC policies across endpoints",
+      "Formulate incident response protocol for unauthorized organization access attempts"
+    ]
+  },
+  {
+    role: "Data Analyst",
+    icon: "📊",
+    presets: [
+      "Design materialized views and ETL aggregation queries for monthly task velocity analytics",
+      "Construct retention cohort analysis query for active organization members",
+      "Formulate data anomaly detection query for failed task execution bursts"
+    ]
+  }
 ];
 
 export function AgenticTaskRunner() {
@@ -44,6 +100,9 @@ export function AgenticTaskRunner() {
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Active role config
+  const currentRoleConfig = ROLE_OPTIONS.find((r) => r.role === selectedRole) || ROLE_OPTIONS[0];
 
   // Fetch all tasks stored in SQLite on load
   const loadStoredTasks = async () => {
@@ -111,34 +170,49 @@ export function AgenticTaskRunner() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-headline-lg text-lg font-bold text-on-surface">Agentic Task Execution</h3>
+                <h3 className="font-headline-lg text-lg font-bold text-on-surface">Dynamic Agentic Task Execution</h3>
                 <span className="px-2 py-0.5 rounded bg-[#00ff4110] border border-[#00ff4133] text-[#00ff41] font-mono text-[10px]">
-                  MULTI-AGENT SWARM
+                  ROLE-AWARE SWARM
+                </span>
+                <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-300 font-mono text-[10px] flex items-center gap-1">
+                  <Brain size={10} />
+                  <span>MEMORY ACTIVE</span>
                 </span>
               </div>
               <p className="font-code-sm text-xs text-on-surface-variant">
-                Controlled multi-agent workflow: Human Twin → Role Agent → Planner → Research → Verification
+                Grounded execution tailored dynamically to role, prompt scope, and persistent memory.
               </p>
             </div>
           </div>
 
+          {/* Role selector dropdown */}
           <div className="flex items-center gap-2">
-            <label className="font-mono text-xs text-on-surface-variant">Role:</label>
-            <input
-              type="text"
+            <label className="font-mono text-xs text-on-surface-variant font-bold">Active Role:</label>
+            <select
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
-              className="bg-surface-container-lowest border border-border-tech rounded px-2.5 py-1 text-xs text-on-surface font-mono focus:border-[#00ff41] focus:outline-none w-44"
-              placeholder="e.g. Software Engineer"
-            />
+              className="bg-surface-container-lowest border border-border-tech rounded px-3 py-1.5 text-xs text-[#00ff41] font-mono font-bold focus:border-[#00ff41] focus:outline-none"
+            >
+              {ROLE_OPTIONS.map((opt) => (
+                <option key={opt.role} value={opt.role}>
+                  {opt.icon} {opt.role}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Preset quick actions */}
-        <div className="mb-4">
-          <span className="font-label-caps text-[10px] text-on-surface-variant block mb-1.5 uppercase">Quick Presets:</span>
+        {/* Role Presets Chips */}
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-label-caps text-[10px] text-on-surface-variant uppercase flex items-center gap-1">
+              <Sparkles size={11} className="text-[#00ff41]" />
+              Role Presets for <strong className="text-zinc-200">{selectedRole}</strong>:
+            </span>
+          </div>
+
           <div className="flex flex-wrap gap-2">
-            {PRESET_TASKS.map((preset, idx) => (
+            {currentRoleConfig.presets.map((preset, idx) => (
               <button
                 key={idx}
                 onClick={() => {
@@ -161,21 +235,21 @@ export function AgenticTaskRunner() {
               rows={3}
               value={taskPrompt}
               onChange={(e) => setTaskPrompt(e.target.value)}
-              placeholder="Describe normal task for your Digital Twin (e.g., 'Analyze query bottleneck in projects module and write index migration')..."
+              placeholder={`Describe task for your ${selectedRole} Digital Twin (e.g., '${currentRoleConfig.presets[0]}')...`}
               className="w-full bg-[#030504] border border-border-tech rounded-lg p-3.5 text-sm text-on-surface font-mono placeholder:text-zinc-600 focus:border-[#00ff41] focus:ring-1 focus:ring-[#00ff4133] focus:outline-none transition-all"
             />
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="font-mono text-[11px] text-on-surface-variant flex items-center gap-1.5">
               <Sparkles size={13} className="text-[#00ff41]" />
-              Controlled execution with structured verification and retry guardrails.
+              Recalls long-term memory &amp; performs multi-agent planning, research, synthesis, and verification.
             </span>
 
             <button
               onClick={() => handleRunTask()}
               disabled={isRunning || !taskPrompt.trim()}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-mono text-xs font-bold rounded transition-all shadow-[0_0_15px_rgba(0,255,65,0.25)] hover:shadow-[0_0_20px_rgba(0,255,65,0.4)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-mono text-xs font-bold rounded transition-all shadow-[0_0_15px_rgba(0,255,65,0.25)] hover:shadow-[0_0_20px_rgba(0,255,65,0.4)] disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             >
               {isRunning ? (
                 <>
@@ -315,60 +389,65 @@ export function AgenticTaskRunner() {
               })}
             </div>
 
-            {/* Right Column: Selected Task Execution Details & Result */}
+            {/* Right Column: Selected Task Deliverable and Solution Summary */}
             <div className="lg:col-span-7 flex flex-col gap-4">
               {currentDisplayItem ? (
                 <div className="p-5 rounded-lg bg-surface-container-lowest border border-border-tech flex flex-col gap-4">
-                  {/* Header */}
-                  <div className="flex items-start justify-between border-b border-border-tech pb-3">
+                  <div className="flex items-start justify-between gap-3 border-b border-border-tech pb-3">
                     <div>
-                      <span className="font-label-caps text-[10px] text-[#00ff41] block mb-1 uppercase">
-                        Selected Task Output
+                      <span className="font-mono text-[10px] text-[#00ff41] font-bold block uppercase">
+                        Active Selected Deliverable
                       </span>
-                      <h4 className="font-mono text-sm font-bold text-on-surface">
+                      <h4 className="font-mono text-sm font-bold text-on-surface mt-0.5">
                         {currentDisplayItem.original_task}
                       </h4>
                     </div>
 
+                    <span className="px-2.5 py-1 rounded bg-[#00ff4115] text-[#00ff41] border border-[#00ff4133] font-mono text-xs font-bold shrink-0">
+                      QA: {currentDisplayItem.verification_result?.score ?? 100}%
+                    </span>
+                  </div>
+
+                  {/* Plan Steps Snapshot */}
+                  {currentDisplayItem.plan?.steps && currentDisplayItem.plan.steps.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="font-label-caps text-[10px] text-zinc-500 uppercase block">Decomposed Steps:</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {currentDisplayItem.plan.steps.map((s) => (
+                          <div key={s.step_number} className="p-2 rounded bg-surface-container-high text-[11px] font-mono text-zinc-300">
+                            <span className="text-[#00ff41] font-bold block text-[10px]">Step 0{s.step_number}</span>
+                            <span className="line-clamp-2">{s.description}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Solution Output Box */}
+                  <div className="space-y-1.5">
+                    <span className="font-label-caps text-[10px] text-zinc-500 uppercase block">Synthesized Solution Deliverable:</span>
+                    <div className="p-4 rounded-lg bg-[#020403] border border-border-tech text-xs font-mono text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
+                      {currentDisplayItem.result?.content || "Task resolution output pending execution."}
+                    </div>
+                  </div>
+
+                  {/* Footer link to Agent Logs */}
+                  <div className="flex items-center justify-between pt-2 border-t border-border-tech/40 text-xs font-mono">
+                    <span className="text-zinc-500">
+                      Task ID: <code className="text-zinc-400">{currentDisplayItem.task_id}</code>
+                    </span>
                     <Link
                       href={`/agents/activity?execution_id=${currentDisplayItem.id}`}
-                      className="px-3 py-1.5 rounded bg-surface-container-high hover:bg-[#00ff4115] border border-border-tech hover:border-[#00ff41] text-zinc-300 hover:text-[#00ff41] font-mono text-xs font-bold flex items-center gap-1.5 transition-all shrink-0"
+                      className="text-[#00ff41] hover:underline flex items-center gap-1 font-bold"
                     >
-                      <Terminal size={13} />
-                      <span>View Flow in Agent Logs →</span>
+                      <span>View Full 5-Agent Working Flow</span>
+                      <ArrowUpRight size={13} />
                     </Link>
-                  </div>
-
-                  {/* Task Solution Content */}
-                  <div className="p-4 rounded-lg bg-[#030504] border border-border-tech font-mono text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
-                    {currentDisplayItem.result?.content || "Task execution finished. Review details in Agent Logs."}
-                  </div>
-
-                  {/* Footer Metrics */}
-                  <div className="grid grid-cols-3 gap-3 font-mono text-xs pt-1 border-t border-border-tech/50">
-                    <div className="bg-surface-container-high p-2.5 rounded border border-border-tech flex flex-col">
-                      <span className="text-zinc-500 text-[10px]">Status</span>
-                      <span className="text-[#00ff41] font-bold">{currentDisplayItem.status}</span>
-                    </div>
-
-                    <div className="bg-surface-container-high p-2.5 rounded border border-border-tech flex flex-col">
-                      <span className="text-zinc-500 text-[10px]">QA Verification</span>
-                      <span className="text-on-surface font-bold">
-                        {currentDisplayItem.verification_result?.score ?? 100}% PASS
-                      </span>
-                    </div>
-
-                    <div className="bg-surface-container-high p-2.5 rounded border border-border-tech flex flex-col">
-                      <span className="text-zinc-500 text-[10px]">Rework Retries</span>
-                      <span className="text-on-surface font-bold">
-                        {currentDisplayItem.retry_count ?? 0}
-                      </span>
-                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="p-10 text-center font-mono text-xs text-zinc-500 border border-dashed border-border-tech rounded-lg">
-                  Select a task execution to view its output details.
+                <div className="p-12 text-center font-mono text-xs text-zinc-500 border border-dashed border-border-tech rounded-lg">
+                  Select a task execution to inspect deliverable.
                 </div>
               )}
             </div>

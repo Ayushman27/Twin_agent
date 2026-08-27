@@ -74,14 +74,31 @@ class HumanAgent:
         state.employee_context = employee_context
         state.current_agent = "role_agent"
 
+        # 4. Recall Long-Term & Working Memory for Employee
+        try:
+            from app.agentic.workflow.memory_service import memory_service
+            recalled = await memory_service.recall_memories(
+                employee_id=state.employee_id,
+                organization_id=state.organization_id,
+                role=state.role,
+                task_query=state.original_task,
+                limit=5
+            )
+            state.recalled_memories = recalled
+            state.memories = recalled
+        except Exception as mem_err:
+            print(f"[HumanAgent] Memory recall warning: {mem_err}")
+            state.recalled_memories = []
+
         # Record action
+        mem_count = len(state.recalled_memories)
         await self.recorder.record_action(
             state=state,
             agent_name="human_agent",
-            action="resolved_employee_context",
+            action="resolved_employee_context_and_memory",
             status="completed",
-            input_summary=f"Employee ID: {state.employee_id}, Task: {state.original_task[:80]}",
-            output_summary=f"Context for {employee_context.get('name')} ({employee_context.get('job_title')}) loaded successfully."
+            input_summary=f"Employee ID: {state.employee_id}, Role: {state.role}",
+            output_summary=f"Context for {employee_context.get('name')} loaded. Recalled {mem_count} persistent memories."
         )
 
         return state

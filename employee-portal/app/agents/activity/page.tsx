@@ -32,11 +32,13 @@ import {
   Code2,
   Award,
   BookOpen,
+  Plus,
 } from "lucide-react";
 import {
   agenticTaskService,
   ExecutionRecord,
   ActionRecord,
+  AgentMemoryItem,
 } from "@/services/agentic-task.service";
 
 const AGENT_PIPELINE = [
@@ -54,9 +56,18 @@ function AgentActivityContent() {
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [selectedExecution, setSelectedExecution] = useState<ExecutionRecord | null>(null);
   const [actionLogs, setActionLogs] = useState<ActionRecord[]>([]);
+  const [memories, setMemories] = useState<AgentMemoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
-  const [activeTab, setActiveTab] = useState<"flow" | "timeline" | "raw">("flow");
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [activeTab, setActiveTab] = useState<"flow" | "timeline" | "memory">("flow");
+
+  // New Memory Modal State
+  const [isAddMemoryOpen, setIsAddMemoryOpen] = useState(false);
+  const [newMemoryKey, setNewMemoryKey] = useState("");
+  const [newMemoryContent, setNewMemoryContent] = useState("");
+  const [newMemoryType, setNewMemoryType] = useState("USER_PREFERENCE");
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
 
   // Replay / Live Animation State
   const [activeRunningStep, setActiveRunningStep] = useState<number>(5); // 1 to 5 (5 = all completed)
@@ -94,8 +105,21 @@ function AgentActivityContent() {
     }
   };
 
+  const loadMemories = async () => {
+    try {
+      setIsLoadingMemories(true);
+      const list = await agenticTaskService.listMemories();
+      setMemories(list);
+    } catch (err) {
+      console.warn("Could not load memories:", err);
+    } finally {
+      setIsLoadingMemories(false);
+    }
+  };
+
   useEffect(() => {
     loadExecutions();
+    loadMemories();
   }, [initialExecutionId]);
 
   const handleSelectExecution = (exec: ExecutionRecord) => {
@@ -103,6 +127,27 @@ function AgentActivityContent() {
     setActiveRunningStep(5);
     setIsReplaying(false);
     loadActionLogs(exec.id);
+  };
+
+  const handleSaveNewMemory = async () => {
+    if (!newMemoryKey.trim() || !newMemoryContent.trim()) return;
+    setIsSavingMemory(true);
+    try {
+      await agenticTaskService.createMemory({
+        key: newMemoryKey.trim(),
+        content: newMemoryContent.trim(),
+        memory_type: newMemoryType,
+        role: selectedExecution?.role || "Software Engineer",
+      });
+      setNewMemoryKey("");
+      setNewMemoryContent("");
+      setIsAddMemoryOpen(false);
+      await loadMemories();
+    } catch (err: any) {
+      alert(err?.message || "Failed to save memory");
+    } finally {
+      setIsSavingMemory(false);
+    }
   };
 
   // Replay Animation Handler
@@ -131,10 +176,10 @@ function AgentActivityContent() {
           </div>
           <div>
             <span className="font-label-caps text-[10px] text-on-surface-variant block uppercase">
-              AGENT ARCHITECTURAL AUDIT &amp; EXECUTION
+              AGENT ARCHITECTURAL AUDIT &amp; MEMORY SYSTEM
             </span>
             <h1 className="font-headline-lg text-2xl font-bold text-on-surface tracking-tight">
-              Agent Logs &amp; Working Flow
+              Agent Logs, Working Flow &amp; Long-Term Memory
             </h1>
           </div>
         </div>
@@ -159,7 +204,10 @@ function AgentActivityContent() {
           </button>
 
           <button
-            onClick={loadExecutions}
+            onClick={() => {
+              loadExecutions();
+              loadMemories();
+            }}
             className="p-2 rounded bg-surface-container-high hover:bg-surface-container-highest border border-border-tech text-zinc-300 hover:text-white font-mono text-xs flex items-center gap-1.5 transition-all"
             title="Refresh database records"
           >
@@ -291,7 +339,18 @@ function AgentActivityContent() {
                 : "text-zinc-400 hover:text-white"
             }`}
           >
-            Agents Working Flow &amp; Outputs
+            Agents Working Flow
+          </button>
+          <button
+            onClick={() => setActiveTab("memory")}
+            className={`px-3 py-1 font-mono text-xs font-bold rounded transition-all flex items-center gap-1.5 ${
+              activeTab === "memory"
+                ? "bg-[#00ff4120] text-[#00ff41] border border-[#00ff4144]"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Brain size={12} />
+            <span>Agent Memory ({memories.length})</span>
           </button>
           <button
             onClick={() => setActiveTab("timeline")}
@@ -309,7 +368,7 @@ function AgentActivityContent() {
       {/* ── Main Content Area ── */}
       {selectedExecution ? (
         <div className="space-y-6">
-          {/* TAB 1: Step-by-Step Architectural Flow with Explicit Agent Final Outputs */}
+          {/* TAB 1: Step-by-Step Architectural Flow with Explicit Outputs */}
           {activeTab === "flow" && (
             <div className="space-y-5">
               {/* ── AGENT 01: Human Agent ── */}
@@ -555,7 +614,63 @@ function AgentActivityContent() {
             </div>
           )}
 
-          {/* TAB 2: Action Timeline Audit */}
+          {/* TAB 2: Agent Memory Store */}
+          {activeTab === "memory" && (
+            <div className="dark-glass rounded-lg border border-border-tech bg-[#050906]/90 p-5 space-y-5">
+              <div className="flex items-center justify-between border-b border-border-tech pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Brain size={18} className="text-[#00ff41]" />
+                  <div>
+                    <h3 className="font-headline-lg text-base font-bold text-on-surface">
+                      Digital Twin Long-Term Memory &amp; Learnings ({memories.length})
+                    </h3>
+                    <p className="font-code-sm text-xs text-zinc-400">
+                      Persistent memories, code standards, user preferences, and task learnings stored in SQLite.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsAddMemoryOpen(true)}
+                  className="px-3 py-1.5 rounded bg-[#00ff4115] hover:bg-[#00ff4125] border border-[#00ff4144] text-[#00ff41] font-mono text-xs font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <Plus size={13} />
+                  <span>Add Memory</span>
+                </button>
+              </div>
+
+              {isLoadingMemories ? (
+                <div className="p-8 text-center font-mono text-xs text-zinc-500 flex items-center justify-center gap-2">
+                  <RefreshCw size={14} className="animate-spin text-[#00ff41]" />
+                  <span>Loading agent memories...</span>
+                </div>
+              ) : memories.length === 0 ? (
+                <div className="p-8 text-center font-mono text-xs text-zinc-500 border border-dashed border-border-tech rounded-lg">
+                  No memories recorded yet. Execute tasks to auto-learn or click &quot;Add Memory&quot;.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {memories.map((mem) => (
+                    <div key={mem.id} className="p-4 rounded-lg bg-[#030504] border border-border-tech flex flex-col gap-2 font-mono text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#00ff41]">{mem.key}</span>
+                        <span className="px-2 py-0.5 rounded bg-surface-container-high border border-border-tech text-[10px] text-zinc-400">
+                          {mem.memory_type}
+                        </span>
+                      </div>
+                      <p className="text-zinc-300 text-[11px] leading-relaxed">{mem.content}</p>
+                      <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-2 border-t border-border-tech/40">
+                        <span>Role: {mem.role}</span>
+                        <span>{mem.created_at ? new Date(mem.created_at).toLocaleDateString() : "Active"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: Action Timeline Audit */}
           {activeTab === "timeline" && (
             <div className="dark-glass rounded-lg border border-border-tech bg-[#050906]/90 p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-border-tech pb-3">
@@ -616,6 +731,73 @@ function AgentActivityContent() {
       ) : (
         <div className="dark-glass rounded-lg border border-border-tech bg-[#050906]/90 p-12 text-center font-mono text-xs text-zinc-500">
           No task executions found in SQLite database. Execute a task in the Tasks section first.
+        </div>
+      )}
+
+      {/* ── MODAL: ADD CUSTOM MEMORY ── */}
+      {isAddMemoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface-container-low border border-border-tech rounded p-6 max-w-md w-full space-y-4 font-mono text-xs shadow-2xl">
+            <h3 className="font-headline-lg text-base font-bold text-on-surface flex items-center gap-2">
+              <Brain size={16} className="text-[#00ff41]" />
+              <span>Add Memory to Digital Twin</span>
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-zinc-400 block mb-1">Memory Key / Title:</label>
+                <input
+                  type="text"
+                  value={newMemoryKey}
+                  onChange={(e) => setNewMemoryKey(e.target.value)}
+                  placeholder="e.g. Postgres Connection Pool Standard"
+                  className="w-full bg-[#030504] border border-border-tech rounded p-2 text-zinc-200 focus:border-[#00ff41] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1">Memory Type:</label>
+                <select
+                  value={newMemoryType}
+                  onChange={(e) => setNewMemoryType(e.target.value)}
+                  className="w-full bg-[#030504] border border-border-tech rounded p-2 text-zinc-200 focus:border-[#00ff41] focus:outline-none"
+                >
+                  <option value="USER_PREFERENCE">User Preference</option>
+                  <option value="CODE_PATTERN">Code / Architecture Pattern</option>
+                  <option value="ORG_GUIDELINE">Organizational Guideline</option>
+                  <option value="TASK_LEARNING">Task Learning</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1">Memory Content / Rule:</label>
+                <textarea
+                  rows={3}
+                  value={newMemoryContent}
+                  onChange={(e) => setNewMemoryContent(e.target.value)}
+                  placeholder="Describe the preference or guideline to persist..."
+                  className="w-full bg-[#030504] border border-border-tech rounded p-2 text-zinc-200 focus:border-[#00ff41] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-tech">
+              <button
+                onClick={() => setIsAddMemoryOpen(false)}
+                className="px-3 py-1.5 rounded border border-border-tech text-zinc-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveNewMemory}
+                disabled={isSavingMemory || !newMemoryKey.trim() || !newMemoryContent.trim()}
+                className="px-4 py-1.5 rounded bg-[#00ff41] hover:bg-[#00e63a] text-black font-bold flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSavingMemory && <RefreshCw size={12} className="animate-spin" />}
+                <span>Save to Memory</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

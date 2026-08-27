@@ -56,6 +56,7 @@ class RoleAgent:
 
         plan_desc = state.plan.task_understanding if state.plan else state.original_task
         research_summary = state.research_results.summary if state.research_results else "No research required."
+        memories_summary = "\n".join([f"- {m['key']}: {m['content']}" for m in state.recalled_memories]) if state.recalled_memories else "No past memories recalled."
 
         user_message = (
             f"Task: {state.original_task}\n"
@@ -63,6 +64,7 @@ class RoleAgent:
             f"Plan: {plan_desc}\n"
             f"Research Insights: {research_summary}\n"
             f"Employee Context: {state.employee_context.get('name')} ({state.employee_context.get('job_title')})\n"
+            f"Recalled Twin Memories:\n{memories_summary}\n"
         )
         if state.verification and state.verification.feedback:
             user_message += f"\nNote: Incorporate feedback from previous review: {state.verification.feedback}\n"
