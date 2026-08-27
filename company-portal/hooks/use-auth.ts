@@ -16,15 +16,29 @@ export function useAuth() {
       }
 
       if (authService.isAuthenticated()) {
-        const remoteUser = await authService.getMe();
-        setUser(remoteUser);
+        try {
+          const remoteUser = await authService.getMe();
+          setUser(remoteUser);
+        } catch (err: any) {
+          // Only clear if explicitly unauthorized/revoked token
+          if (
+            err?.message?.includes("401") ||
+            err?.message?.includes("Unauthorized") ||
+            err?.message?.includes("Invalid token") ||
+            err?.message?.includes("Token has expired")
+          ) {
+            authService.logout();
+            setUser(null);
+          } else if (stored) {
+            // Keep active session alive on page reload
+            setUser(stored);
+          }
+        }
       } else {
         setUser(null);
       }
     } catch {
-      // If fetching /me fails (e.g. token expired), clear local session
-      authService.logout();
-      setUser(null);
+      // Non-fatal fallback
     } finally {
       setIsLoading(false);
     }

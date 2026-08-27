@@ -157,3 +157,44 @@ class ApprovalRequest(UUIDMixin, TimestampMixin, Base):
     comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     execution: Mapped["AgentExecution"] = relationship("AgentExecution")
+
+
+class AgentTaskExecution(UUIDMixin, TimestampMixin, Base):
+    """Execution record for high-level multi-agent workflows."""
+    __tablename__ = "agent_task_executions"
+
+    task_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    employee_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    organization_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
+    original_task: Mapped[str] = mapped_column(Text, nullable=False)
+    plan: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    research_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    verification_result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    action_logs: Mapped[List["AgentActionLog"]] = relationship(
+        "AgentActionLog", back_populates="execution", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class AgentActionLog(UUIDMixin, TimestampMixin, Base):
+    """Step-by-step action history recorded by Action Recorder for UI visibility."""
+    __tablename__ = "agent_action_logs"
+
+    execution_id: Mapped[str] = mapped_column(ForeignKey("agent_task_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    action: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="COMPLETED", nullable=False)
+    
+    input_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    execution: Mapped["AgentTaskExecution"] = relationship("AgentTaskExecution", back_populates="action_logs")
