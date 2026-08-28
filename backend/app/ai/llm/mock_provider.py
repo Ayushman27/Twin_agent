@@ -58,15 +58,37 @@ class MockLLMProvider(AIProvider):
     """
 
     async def generate(self, system_prompt: str, user_message: str) -> str:
-        if "JSON parameter extraction" in system_prompt or "Return ONLY a JSON object" in system_prompt:
-            # Fallback JSON response for intent extraction when LLM API key is not configured
+        import re, json
+        if "parameter extraction" in system_prompt or "JSON" in system_prompt or "Return ONLY a JSON" in system_prompt:
             msg_lower = user_message.lower()
-            if any(k in msg_lower for k in ["send", "message", "msg", "tell"]):
-                # Extract potential name after 'to' or 'tell' or 'message'
-                m_name = re.search(r"(?:to|tell|message)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
+            if any(k in msg_lower for k in ["email", "mail"]):
+                m_name = re.search(r"(?:email|mail|to)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
                 rec = m_name.group(1) if m_name else None
-                return json.dumps({"is_messaging": True, "recipient": rec, "text": None})
-            return json.dumps({"is_messaging": False, "recipient": None, "text": None})
+                m_body = re.search(r"(?:saying|that|:)\s+(.+)", user_message, re.IGNORECASE)
+                body = m_body.group(1).strip() if m_body else None
+                return json.dumps({
+                    "intent": "SEND_EMAIL",
+                    "is_email": True,
+                    "is_messaging": False,
+                    "recipient": rec,
+                    "subject": "Update" if body else None,
+                    "body": body,
+                    "text": body,
+                })
+            elif any(k in msg_lower for k in ["message", "msg", "text", "telegram", "tell"]):
+                m_name = re.search(r"(?:to|tell|message|text)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
+                rec = m_name.group(1) if m_name else None
+                m_body = re.search(r"(?:saying|that|:)\s+(.+)", user_message, re.IGNORECASE)
+                body = m_body.group(1).strip() if m_body else None
+                return json.dumps({
+                    "intent": "SEND_MESSAGE",
+                    "is_messaging": True,
+                    "is_email": False,
+                    "recipient": rec,
+                    "text": body,
+                    "body": body,
+                })
+            return json.dumps({"intent": "CHAT", "is_messaging": False, "is_email": False, "recipient": None, "text": None, "body": None})
 
         key = self._classify(user_message)
         responses = TWIN_AGENT_RESPONSES.get(key, TWIN_AGENT_RESPONSES["default"])

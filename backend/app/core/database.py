@@ -45,7 +45,9 @@ async def init_db() -> None:
     from app.modules.teams.models import Team, TeamMember  # noqa: F401
     from app.integrations.telegram.models import TelegramIdentity  # noqa: F401
     from app.db.models.message import Message  # noqa: F401
-    from app.db.postgres import get_neon_session_maker
+    from app.db.models.email import EmailRecord  # noqa: F401
+    from app.db.models.gmail_connection import GmailConnection  # noqa: F401
+    from app.db.postgres import get_neon_session_maker, get_neon_engine
     from app.core.security import hash_password
     from sqlalchemy import select
 
@@ -53,7 +55,16 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # 2. Seed identity test data in the active identity store
+    # 2. Ensure Neon PostgreSQL tables exist for identity and connections
+    neon_eng = get_neon_engine()
+    if neon_eng is not None:
+        try:
+            async with neon_eng.begin() as n_conn:
+                await n_conn.run_sync(Base.metadata.create_all)
+        except Exception:
+            pass
+
+    # 3. Seed identity test data in the active identity store
     neon_maker = get_neon_session_maker()
     session_factory = neon_maker if neon_maker is not None else AsyncSessionLocal
 
