@@ -102,7 +102,13 @@ export function AgenticTaskRunner() {
   const [error, setError] = useState<string | null>(null);
 
   // Active role config
-  const currentRoleConfig = ROLE_OPTIONS.find((r) => r.role === selectedRole) || ROLE_OPTIONS[0];
+  const currentRoleConfig =
+    ROLE_OPTIONS.find((r) => r.role === selectedRole) ||
+    ROLE_OPTIONS[0] || {
+      role: "Software Engineer",
+      icon: "💻",
+      presets: [],
+    };
 
   // Fetch all tasks stored in SQLite on load
   const loadStoredTasks = async () => {
@@ -110,7 +116,7 @@ export function AgenticTaskRunner() {
       setIsLoadingHistory(true);
       const list = await agenticTaskService.listExecutions(50);
       setStoredExecutions(list);
-      if (list.length > 0 && !selectedExecutionId && !activeTask) {
+      if (list.length > 0 && !selectedExecutionId && !activeTask && list[0]) {
         setSelectedExecutionId(list[0].id);
       }
     } catch (err: any) {
@@ -235,7 +241,7 @@ export function AgenticTaskRunner() {
               rows={3}
               value={taskPrompt}
               onChange={(e) => setTaskPrompt(e.target.value)}
-              placeholder={`Describe task for your ${selectedRole} Digital Twin (e.g., '${currentRoleConfig.presets[0]}')...`}
+              placeholder={`Describe task for your ${selectedRole} Digital Twin (e.g., '${currentRoleConfig.presets[0] || ""}')...`}
               className="w-full bg-[#030504] border border-border-tech rounded-lg p-3.5 text-sm text-on-surface font-mono placeholder:text-zinc-600 focus:border-[#00ff41] focus:ring-1 focus:ring-[#00ff4133] focus:outline-none transition-all"
             />
           </div>
@@ -437,7 +443,7 @@ export function AgenticTaskRunner() {
                       Task ID: <code className="text-zinc-400">{currentDisplayItem.task_id}</code>
                     </span>
                     <Link
-                      href={`/agents/activity?execution_id=${currentDisplayItem.id}`}
+                      href={`/agents/activity?execution_id=${'id' in currentDisplayItem ? currentDisplayItem.id : (currentDisplayItem.execution_id || "")}`}
                       className="text-[#00ff41] hover:underline flex items-center gap-1 font-bold"
                     >
                       <span>View Full 5-Agent Working Flow</span>

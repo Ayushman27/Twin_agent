@@ -249,7 +249,7 @@ export default function PeoplePage() {
 
   // Open Assign Task Modal
   const openAssignTaskModal = (member?: DetailedMember) => {
-    setTaskAssignee(member || (members.length > 0 ? members[0] : null));
+    setTaskAssignee(member ?? members[0] ?? null);
     setAssignedTaskText("");
     setAssignedPriority("MEDIUM");
     setAssignedAutoExecute(false);

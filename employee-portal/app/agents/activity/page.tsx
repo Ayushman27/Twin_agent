@@ -83,8 +83,10 @@ function AgentActivityContent() {
       if (list.length > 0) {
         const found = initialExecutionId ? list.find((e) => e.id === initialExecutionId) : list[0];
         const target = found || list[0];
-        setSelectedExecution(target);
-        loadActionLogs(target.id);
+        if (target) {
+          setSelectedExecution(target);
+          loadActionLogs(target.id);
+        }
       }
     } catch (err) {
       console.warn("Could not load executions from SQLite:", err);

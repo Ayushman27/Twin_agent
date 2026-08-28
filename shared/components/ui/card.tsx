@@ -1,8 +1,9 @@
+import * as React from "react";
 import { HTMLAttributes, forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
 const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, ...props }: HTMLAttributes<HTMLDivElement>, ref) => (
     <div
       ref={ref}
       className={cn("dark-glass rounded flex flex-col p-grid_unit", className)}
@@ -13,7 +14,7 @@ const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 Card.displayName = "Card";
 
 const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, ...props }: HTMLAttributes<HTMLDivElement>, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -27,7 +28,7 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, ...props }: HTMLAttributes<HTMLDivElement>, ref) => (
     <div
       ref={ref}
       className={cn("font-headline-lg-mobile text-headline-lg-mobile text-on-surface", className)}
@@ -38,7 +39,7 @@ const CardTitle = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 CardTitle.displayName = "CardTitle";
 
 const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, ...props }: HTMLAttributes<HTMLDivElement>, ref) => (
     <div
       ref={ref}
       className={cn("font-body-md text-body-md text-on-surface-variant", className)}
@@ -49,7 +50,7 @@ const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 CardContent.displayName = "CardContent";
 
 const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+  ({ className, ...props }: HTMLAttributes<HTMLDivElement>, ref) => (
     <div
       ref={ref}
       className={cn("border-t border-border-tech pt-4 mt-4 flex items-center gap-2", className)}

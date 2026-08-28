@@ -1,4 +1,3 @@
-// @ts-ignore
 import { create } from "zustand";
 
 interface Notification {
@@ -19,7 +18,7 @@ interface UIState {
   addNotification: (n: Notification) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>()((set) => ({
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
