@@ -34,11 +34,6 @@ export function middleware(req: NextRequest) {
   const isEmployeeRole = userRole && userRole !== "ORG_ADMIN" && userRole !== "SUPER_ADMIN";
   const hasValidOrg = !!orgId;
 
-  // If user is at /login or /register and already has a valid employee session with organization -> redirect to /dashboard
-  if (isAuthRoute && token && isEmployeeRole && hasValidOrg) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
   // If accessing a protected route without token -> redirect to /login
   if (isProtectedRoute && !token) {
     const loginUrl = new URL("/login", req.url);

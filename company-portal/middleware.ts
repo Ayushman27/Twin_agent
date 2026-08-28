@@ -23,11 +23,6 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/organization") ||
     pathname.startsWith("/settings");
 
-  // If user is at /login or /register and already has an admin session -> redirect to /dashboard
-  if (isAuthRoute && token && (userRole === "ORG_ADMIN" || userRole === "SUPER_ADMIN")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
   // If accessing a protected route without token -> redirect to /login
   if (isProtectedRoute && !token) {
     const loginUrl = new URL("/login", req.url);
