@@ -67,19 +67,39 @@ export interface ChangePasswordPayload {
   confirm_password: string;
 }
 
+function getPortalPrefix(): string {
+  if (typeof window === "undefined") return "";
+  if (window.location.port === "3001") return "emp_";
+  if (window.location.port === "3000") return "admin_";
+  return "";
+}
+
 function setCookie(name: string, value: string, days: number = 7) {
   if (typeof document === "undefined") return;
   const maxAge = days * 86400;
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  const prefix = getPortalPrefix();
+  if (prefix && !name.startsWith("emp_") && !name.startsWith("admin_")) {
+    document.cookie = `${prefix}${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }
 }
 
 function deleteCookie(name: string) {
   if (typeof document === "undefined") return;
   document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+  const prefix = getPortalPrefix();
+  if (prefix && !name.startsWith("emp_") && !name.startsWith("admin_")) {
+    document.cookie = `${prefix}${name}=; path=/; max-age=0; SameSite=Lax`;
+  }
 }
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
+  const prefix = getPortalPrefix();
+  if (prefix && !name.startsWith("emp_") && !name.startsWith("admin_")) {
+    const prefMatch = document.cookie.match(new RegExp("(^| )" + prefix + name + "=([^;]+)"));
+    if (prefMatch && prefMatch[2]) return decodeURIComponent(prefMatch[2]);
+  }
   const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
   return match && match[2] ? decodeURIComponent(match[2]) : null;
 }
@@ -128,15 +148,25 @@ export const authService = {
     };
 
     if (typeof window !== "undefined") {
-      setCookie("access_token", session.access_token, payload.rememberMe ? 30 : 7);
-      setCookie("user_role", session.user.role || "EMPLOYEE", payload.rememberMe ? 30 : 7);
+      const isCompanyAdmin = session.user.role === "ORG_ADMIN" || session.user.role === "SUPER_ADMIN" || window.location.port === "3000";
+      const prefix = isCompanyAdmin ? "admin_" : "emp_";
+      const days = payload.rememberMe ? 30 : 7;
+
+      setCookie("access_token", session.access_token, days);
+      setCookie("user_role", session.user.role || (isCompanyAdmin ? "ORG_ADMIN" : "EMPLOYEE"), days);
+      setCookie(`${prefix}access_token`, session.access_token, days);
+      setCookie(`${prefix}user_role`, session.user.role || (isCompanyAdmin ? "ORG_ADMIN" : "EMPLOYEE"), days);
+
       const orgId = session.user.organization_id || session.user.organizationId;
       if (orgId) {
-        setCookie("organization_id", orgId, payload.rememberMe ? 30 : 7);
+        setCookie("organization_id", orgId, days);
+        setCookie(`${prefix}organization_id`, orgId, days);
       } else {
         deleteCookie("organization_id");
+        deleteCookie(`${prefix}organization_id`);
       }
       localStorage.setItem("access_token", session.access_token);
+      localStorage.setItem(`${prefix}access_token`, session.access_token);
       if (session.refresh_token) {
         localStorage.setItem("refresh_token", session.refresh_token);
       }
@@ -158,14 +188,15 @@ export const authService = {
       const session: AuthSession = {
         user,
         access_token: "mock_jwt_token_admin_registered",
-        refresh_token: "mock_refresh_token",
+        refresh_token: "mock_refresh_token_admin",
       };
       if (typeof window !== "undefined") {
-        setCookie("access_token", session.access_token, 7);
-        setCookie("user_role", "ORG_ADMIN", 7);
-        if (user.organization_id) {
-          setCookie("organization_id", user.organization_id, 7);
-        }
+        setCookie("access_token", session.access_token, 30);
+        setCookie("user_role", "ORG_ADMIN", 30);
+        setCookie("admin_access_token", session.access_token, 30);
+        setCookie("admin_user_role", "ORG_ADMIN", 30);
+        setCookie("organization_id", user.organization_id!, 30);
+        setCookie("admin_organization_id", user.organization_id!, 30);
         localStorage.setItem("access_token", session.access_token);
         localStorage.setItem("current_user", JSON.stringify(session.user));
       }
@@ -173,14 +204,10 @@ export const authService = {
     }
 
     const res = await apiClient.post<{
-      success: boolean;
-      message: string;
       access_token: string;
       refresh_token: string;
-      token_type: string;
-      organization: { id: string; company_name: string };
       user: User;
-    }>("/onboarding/company/register", payload);
+    }>("/onboarding/organization/register", payload);
 
     const session: AuthSession = {
       user: res.user,
@@ -189,16 +216,17 @@ export const authService = {
     };
 
     if (typeof window !== "undefined") {
-      setCookie("access_token", session.access_token, 7);
-      setCookie("user_role", session.user.role || "ORG_ADMIN", 7);
-      const orgId = session.user.organization_id || session.user.organizationId || res.organization?.id;
+      setCookie("access_token", session.access_token, 30);
+      setCookie("user_role", "ORG_ADMIN", 30);
+      setCookie("admin_access_token", session.access_token, 30);
+      setCookie("admin_user_role", "ORG_ADMIN", 30);
+      const orgId = session.user.organization_id || session.user.organizationId;
       if (orgId) {
-        setCookie("organization_id", orgId, 7);
+        setCookie("organization_id", orgId, 30);
+        setCookie("admin_organization_id", orgId, 30);
       }
       localStorage.setItem("access_token", session.access_token);
-      if (session.refresh_token) {
-        localStorage.setItem("refresh_token", session.refresh_token);
-      }
+      localStorage.setItem("admin_access_token", session.access_token);
       localStorage.setItem("current_user", JSON.stringify(session.user));
     }
 
@@ -293,12 +321,21 @@ export const authService = {
 
   logout(redirectUrl?: string): void {
     if (typeof window !== "undefined") {
+      const prefix = window.location.port === "3001" ? "emp_" : window.location.port === "3000" ? "admin_" : "";
       deleteCookie("access_token");
       deleteCookie("user_role");
       deleteCookie("organization_id");
+      if (prefix) {
+        deleteCookie(`${prefix}access_token`);
+        deleteCookie(`${prefix}user_role`);
+        deleteCookie(`${prefix}organization_id`);
+      }
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("current_user");
+      if (prefix) {
+        localStorage.removeItem(`${prefix}access_token`);
+      }
       if (redirectUrl) {
         window.location.href = redirectUrl;
       }
@@ -318,6 +355,12 @@ export const authService = {
 
   isAuthenticated(): boolean {
     if (typeof window === "undefined") return false;
-    return !!localStorage.getItem("access_token") || !!getCookie("access_token");
+    const prefix = window.location.port === "3001" ? "emp_" : window.location.port === "3000" ? "admin_" : "";
+    return (
+      !!localStorage.getItem("access_token") ||
+      !!(prefix && localStorage.getItem(`${prefix}access_token`)) ||
+      !!getCookie("access_token") ||
+      !!(prefix && getCookie(`${prefix}access_token`))
+    );
   },
 };

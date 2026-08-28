@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { authService } from "@shared/services/auth.service";
 import {
   User,
   CreditCard,
@@ -16,18 +17,34 @@ import {
   UserPlus,
   Lock,
   ExternalLink,
+  LogOut,
+  LayoutDashboard,
 } from "lucide-react";
 
 export default function EmployeeLandingPage() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const updateMousePosition = (e: MouseEvent) => {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
     window.addEventListener("mousemove", updateMousePosition);
+
+    const authed = authService.isAuthenticated();
+    setIsAuthenticated(authed);
+    const user = authService.getCurrentUser();
+    if (user?.email) setCurrentUserEmail(user.email);
+
     return () => window.removeEventListener("mousemove", updateMousePosition);
   }, []);
+
+  const handleLogout = () => {
+    authService.logout();
+    setIsAuthenticated(false);
+    setCurrentUserEmail(null);
+  };
 
   return (
     <div className="min-h-screen bg-[#050806] text-[#e5e2e1] font-sans relative overflow-x-hidden selection:bg-[#00ff41] selection:text-[#050505]">
@@ -92,19 +109,42 @@ export default function EmployeeLandingPage() {
               <Settings className="w-4 h-4" />
             </button>
 
-            <Link
-              href="/login"
-              className="px-3.5 py-2 border border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-white bg-zinc-950/80 transition-all"
-            >
-              Login
-            </Link>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/dashboard"
+                  className="px-3.5 py-2 border border-[#00ff4166] text-[#00ff41] bg-[#00ff4115] hover:bg-[#00ff4125] font-bold flex items-center gap-1.5 transition-all"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span>Dashboard</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-3 py-2 border border-zinc-800 hover:border-error/60 text-zinc-400 hover:text-error bg-zinc-950/80 flex items-center gap-1.5 transition-all"
+                  title="Sign out of your session"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="px-3.5 py-2 border border-zinc-800 hover:border-zinc-600 text-zinc-300 hover:text-white bg-zinc-950/80 transition-all"
+                >
+                  Login
+                </Link>
 
-            <Link
-              href="/register"
-              className="px-4 py-2 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-bold transition-all shadow-[0_0_15px_rgba(0,255,65,0.3)] hover:shadow-[0_0_20px_rgba(0,255,65,0.5)]"
-            >
-              Register Yourself
-            </Link>
+                <Link
+                  href="/register"
+                  className="px-4 py-2 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-bold transition-all shadow-[0_0_15px_rgba(0,255,65,0.3)] hover:shadow-[0_0_20px_rgba(0,255,65,0.5)]"
+                >
+                  Register Yourself
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -119,6 +159,11 @@ export default function EmployeeLandingPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 border border-[#00ff4144] bg-[#00ff410d] font-mono text-xs text-[#00ff41] tracking-wider">
               <span className="w-2 h-2 rounded-full bg-[#00ff41] animate-pulse" />
               <span>SYS.STATUS: ONLINE</span>
+              {isAuthenticated && currentUserEmail && (
+                <span className="text-zinc-400 border-l border-zinc-700 pl-2">
+                  LOGGED IN: {currentUserEmail}
+                </span>
+              )}
             </div>
 
             {/* Massive Heading */}
@@ -138,21 +183,44 @@ export default function EmployeeLandingPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-4 pt-2 font-mono text-sm">
-              <Link
-                href="/register"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-bold tracking-wider transition-all shadow-[0_0_20px_rgba(0,255,65,0.4)] hover:scale-[1.02]"
-              >
-                <span>INITIALIZE SYSTEM</span>
-                <Rocket className="w-4 h-4" />
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-bold tracking-wider transition-all shadow-[0_0_20px_rgba(0,255,65,0.4)] hover:scale-[1.02]"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>OPEN EMPLOYEE DASHBOARD</span>
+                  </Link>
 
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 hover:border-[#00ff4166] text-zinc-200 hover:text-white tracking-wider transition-all"
-              >
-                <span>READ DOCS</span>
-                <BookOpen className="w-4 h-4 text-zinc-400" />
-              </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-2 px-6 py-3.5 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 hover:border-error/60 text-zinc-300 hover:text-error tracking-wider transition-all"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>SIGN OUT / SWITCH</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#00ff41] hover:bg-[#00e63a] text-[#050505] font-bold tracking-wider transition-all shadow-[0_0_20px_rgba(0,255,65,0.4)] hover:scale-[1.02]"
+                  >
+                    <span>INITIALIZE SYSTEM</span>
+                    <Rocket className="w-4 h-4" />
+                  </Link>
+
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-2 px-6 py-3.5 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 hover:border-[#00ff4166] text-zinc-200 hover:text-white tracking-wider transition-all"
+                  >
+                    <Lock className="w-4 h-4 text-zinc-400" />
+                    <span>SIGN IN WITH CREDENTIALS</span>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Option Cards: Register vs Login Choice */}

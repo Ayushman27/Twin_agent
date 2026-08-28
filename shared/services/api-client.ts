@@ -8,7 +8,12 @@ function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   const localToken = localStorage.getItem("access_token");
   if (localToken) return localToken;
-  // Fallback to cookie
+  // Fallback to portal-specific cookie, then generic cookie
+  const prefix = window.location.port === "3001" ? "emp_" : window.location.port === "3000" ? "admin_" : "";
+  if (prefix) {
+    const matchPref = document.cookie.match(new RegExp("(^| )" + prefix + "access_token=([^;]+)"));
+    if (matchPref && matchPref[2]) return decodeURIComponent(matchPref[2]);
+  }
   const match = document.cookie.match(new RegExp("(^| )access_token=([^;]+)"));
   return match && match[2] ? decodeURIComponent(match[2]) : null;
 }

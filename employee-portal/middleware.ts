@@ -14,9 +14,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get("access_token")?.value;
-  const userRole = req.cookies.get("user_role")?.value;
-  const orgId = req.cookies.get("organization_id")?.value;
+  const token = req.cookies.get("emp_access_token")?.value || req.cookies.get("access_token")?.value;
+  const userRole = req.cookies.get("emp_user_role")?.value || (req.cookies.get("emp_access_token") ? "EMPLOYEE" : req.cookies.get("user_role")?.value);
+  const orgId = req.cookies.get("emp_organization_id")?.value || req.cookies.get("organization_id")?.value;
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
   const isProtectedRoute =
@@ -34,11 +34,6 @@ export function middleware(req: NextRequest) {
   const isEmployeeRole = userRole && userRole !== "ORG_ADMIN" && userRole !== "SUPER_ADMIN";
   const hasValidOrg = !!orgId;
 
-  // If user is at /login or /register and already has a valid employee session with organization -> redirect to /dashboard
-  if (isAuthRoute && token && isEmployeeRole && hasValidOrg) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
   // If accessing a protected route without token -> redirect to /login
   if (isProtectedRoute && !token) {
     const loginUrl = new URL("/login", req.url);
@@ -46,8 +41,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If authenticated as an ORG_ADMIN -> block employee portal access
-  if (isProtectedRoute && token && (userRole === "ORG_ADMIN" || userRole === "SUPER_ADMIN")) {
+  // If authenticated strictly as an ORG_ADMIN without employee token -> redirect to login
+  if (isProtectedRoute && token && !req.cookies.get("emp_access_token") && (userRole === "ORG_ADMIN" || userRole === "SUPER_ADMIN")) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("error", "admin_restricted");
     return NextResponse.redirect(loginUrl);

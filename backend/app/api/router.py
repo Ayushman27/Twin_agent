@@ -16,6 +16,7 @@ from app.modules.health.router import api_health_router
 from app.api.agentic.groups import router as agent_groups_router
 from app.api.agentic.capabilities import router as agent_capabilities_router
 from app.api.agentic.executions import router as agent_executions_router
+from app.api.agentic.workflow_router import router as agent_workflow_router
 from app.api.v1.endpoints.gemini_live import router as gemini_live_router
 from app.api.v1.endpoints.messaging import router as messaging_router
 from app.integrations.telegram.router import router as telegram_router
@@ -43,6 +44,7 @@ api_router.include_router(gemini_live_router, prefix="",              tags=["Gem
 api_router.include_router(agent_groups_router,       prefix="", tags=["Agent Groups"])
 api_router.include_router(agent_capabilities_router, prefix="", tags=["Agent Capabilities"])
 api_router.include_router(agent_executions_router,   prefix="", tags=["Agent Executions"])
+api_router.include_router(agent_workflow_router,     prefix="", tags=["Agentic Workflow"])
 
 # ── Telegram Integration Channel ──────────────────────────────────────────────
 api_router.include_router(telegram_router, prefix="/telegram", tags=["Telegram Integration"])

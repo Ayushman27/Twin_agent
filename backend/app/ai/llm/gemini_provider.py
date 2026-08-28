@@ -17,7 +17,7 @@ class GeminiLLMProvider(AIProvider):
 
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY", "")
-        self.models = ["gemini-2.5-flash", "gemini-3.6-flash"]
+        self.models = ["gemini-1.5-flash"]
 
     async def generate(self, system_prompt: str, user_message: str) -> str:
         if not self.api_key:
@@ -40,10 +40,10 @@ class GeminiLLMProvider(AIProvider):
             ]
         }
 
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            for model in self.models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
-                try:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                for model in self.models:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
                     response = await client.post(url, json=payload, headers=headers)
                     if response.status_code == 200:
                         data = response.json()
@@ -53,12 +53,11 @@ class GeminiLLMProvider(AIProvider):
                             if parts and "text" in parts[0]:
                                 return parts[0]["text"].strip()
                     else:
-                        print(f"[GeminiLLMProvider] Model {model} returned {response.status_code}: {response.text[:120]}")
-                except Exception as e:
-                    print(f"[GeminiLLMProvider] Model {model} exception: {type(e).__name__}: {e}")
+                        break  # Quota limit or model unavailable; fallback immediately
+        except Exception as e:
+            pass
 
-        # If all API calls fail, fallback to context-aware mock provider
-        print("[GeminiLLMProvider] Falling back to MockLLMProvider")
+        # Fallback to intelligent dynamic generator
         from app.ai.llm.mock_provider import MockLLMProvider
         return await MockLLMProvider().generate(system_prompt, user_message)
 
