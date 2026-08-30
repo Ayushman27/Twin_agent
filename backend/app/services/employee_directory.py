@@ -156,13 +156,25 @@ class EmployeeDirectoryService:
             res = await self.db.execute(stmt_name_exact)
             matches = res.all()
 
-        # 4. Partial Name Match (contains substring)
+        # 4. Exact First/Word Name Match (e.g. 'Shreya' matches 'Shreya Mishra' over 'Shreyashi')
+        if not matches:
+            stmt_word_exact = base_stmt.where(
+                or_(
+                    User.name.ilike(f"{cleaned_q} %"),
+                    User.name.ilike(f"% {cleaned_q}"),
+                    User.name.ilike(f"% {cleaned_q} %"),
+                )
+            )
+            res = await self.db.execute(stmt_word_exact)
+            matches = res.all()
+
+        # 5. Partial Substring Name Match (contains substring)
         if not matches:
             stmt_name_partial = base_stmt.where(User.name.ilike(f"%{cleaned_q}%"))
             res = await self.db.execute(stmt_name_partial)
             matches = res.all()
 
-        # 5. First Name / Last Name or Prefix Fallback (if multi-word or >= 3 chars)
+        # 6. First Name / Last Name or Prefix Fallback (if multi-word or >= 3 chars)
         if not matches:
             words = cleaned_q.split()
             if words:

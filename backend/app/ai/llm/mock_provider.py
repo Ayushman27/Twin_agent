@@ -60,11 +60,29 @@ class MockLLMProvider(AIProvider):
     async def generate(self, system_prompt: str, user_message: str) -> str:
         import re, json
         if "parameter extraction" in system_prompt or "JSON" in system_prompt or "Return ONLY a JSON" in system_prompt:
-            msg_lower = user_message.lower()
+            # Isolate the current user prompt, ignoring system prompt context and conversation history
+            current_input = user_message
+            if "Current user input:" in user_message:
+                current_input = user_message.split("Current user input:", 1)[1]
+            elif "User:" in user_message:
+                current_input = user_message.split("User:", 1)[1]
+
+            clean_input = current_input.strip()
+            # Strip noise words like "New", "Hey Echo", "Can you please"
+            clean_input = re.sub(r"^(?:new|hey|echo|please|kindly|so|okay|ok)\s+", "", clean_input, flags=re.IGNORECASE).strip()
+
+            msg_lower = clean_input.lower()
             if any(k in msg_lower for k in ["email", "mail"]):
-                m_name = re.search(r"(?:email|mail|to)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
-                rec = m_name.group(1) if m_name else None
-                m_body = re.search(r"(?:saying|that|:)\s+(.+)", user_message, re.IGNORECASE)
+                m_name = re.search(
+                    r"(?:send\s+(?:an?\s+)?(?:email|mail)\s+to|(?:email|mail)\s+to|(?:email|mail))\s+([a-zA-Z\s\.-]+?)(?:\s+(?:saying|said\s+that|that|for|about|:)|\s*$)",
+                    clean_input,
+                    re.IGNORECASE,
+                )
+                if not m_name:
+                    m_name = re.search(r"\bto\s+([a-zA-Z\s\.-]+?)(?:\s+(?:saying|said\s+that|that|for|about|:)|\s*$)", clean_input, re.IGNORECASE)
+                rec = m_name.group(1).strip() if m_name else None
+
+                m_body = re.search(r"(?:saying|said\s+that|that|for|about|:)\s+(.+)", clean_input, re.IGNORECASE)
                 body = m_body.group(1).strip() if m_body else None
                 return json.dumps({
                     "intent": "SEND_EMAIL",
@@ -76,9 +94,16 @@ class MockLLMProvider(AIProvider):
                     "text": body,
                 })
             elif any(k in msg_lower for k in ["message", "msg", "text", "telegram", "tell"]):
-                m_name = re.search(r"(?:to|tell|message|text)\s+([a-zA-Z]+)", user_message, re.IGNORECASE)
-                rec = m_name.group(1) if m_name else None
-                m_body = re.search(r"(?:saying|that|:)\s+(.+)", user_message, re.IGNORECASE)
+                m_name = re.search(
+                    r"(?:send\s+(?:a\s+)?(?:msg|message|text)\s+to|(?:message|text)\s+to|(?:tell|message|text))\s+([a-zA-Z\s\.-]+?)(?:\s+(?:saying|said\s+that|that|for|about|:)|\s*$)",
+                    clean_input,
+                    re.IGNORECASE,
+                )
+                if not m_name:
+                    m_name = re.search(r"\bto\s+([a-zA-Z\s\.-]+?)(?:\s+(?:saying|said\s+that|that|for|about|:)|\s*$)", clean_input, re.IGNORECASE)
+                rec = m_name.group(1).strip() if m_name else None
+
+                m_body = re.search(r"(?:saying|said\s+that|that|for|about|:)\s+(.+)", clean_input, re.IGNORECASE)
                 body = m_body.group(1).strip() if m_body else None
                 return json.dumps({
                     "intent": "SEND_MESSAGE",

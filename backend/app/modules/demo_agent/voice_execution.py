@@ -26,27 +26,27 @@ from app.services.email_context_service import EmailContextService
 
 # ── 1. EMAIL INTENT PATTERNS ──────────────────────────────────────────────────
 EMAIL_FULL_PATTERNS = [
-    # send [recipient] an email about [subject] saying/that/: [body]
-    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an\s+)?email\s+about\s+(?P<subject>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # send an email to [recipient] about [subject] saying/that/: [body]
-    re.compile(r"^send\s+(?:an\s+)?email\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+about\s+(?P<subject>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # send [recipient] an email/update on [project/topic]
-    re.compile(r"^(?:send\s+(?:an\s+)?email\s+to|email|mail|send)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:the\s+latest\s+update\s+on\s+|an\s+email\s+with\s+the\s+latest\s+update\s+on\s+|an\s+update\s+on\s+|about\s+)(?P<body>.+)", re.IGNORECASE),
-    # send an email to [recipient] saying/that/: [body]
-    re.compile(r"^send\s+(?:an\s+)?email\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # send [recipient] an email saying/that/: [body]
-    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an\s+)?email\s+(?:saying|that|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # email/mail [recipient] saying/that/: [body]
-    re.compile(r"^(?:email|mail)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # tell [recipient] through/via/by email that/saying/: [body]
-    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:through|via|by)\s+email\s+(?:that|saying|:)\s+(?P<body>.+)", re.IGNORECASE),
-    # send an email to [recipient] "body"
-    re.compile(r"^send\s+(?:an\s+)?email\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<body>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # send [recipient] an email/mail about [subject] saying/said that/that/: [body]
+    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an?\s+)?(?:email|mail)\s+about\s+(?P<subject>[\w\s\.-]+?)\s+(?:saying|said\s+that|that|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # send an email/mail to [recipient] about [subject] saying/said that/that/: [body]
+    re.compile(r"^send\s+(?:an?\s+)?(?:email|mail)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+about\s+(?P<subject>[\w\s\.-]+?)\s+(?:saying|said\s+that|that|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # send an email/a mail to [recipient] saying/said that/that/: [body]
+    re.compile(r"^send\s+(?:an?\s+)?(?:email|mail)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|said\s+that|that|for|about|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # send [recipient] an email/a mail saying/said that/that/: [body]
+    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an?\s+)?(?:email|mail)\s+(?:saying|said\s+that|that|for|about|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # email/mail [recipient] saying/said that/that/: [body]
+    re.compile(r"^(?:email|mail)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|said\s+that|that|for|about|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # send [recipient] an email/update on/for [project/topic]
+    re.compile(r"^(?:send\s+(?:an?\s+)?(?:email|mail)\s+to|email|mail|send)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:the\s+latest\s+update\s+on\s+|an?\s+(?:email|mail)\s+with\s+the\s+latest\s+update\s+on\s+|an?\s+update\s+on\s+|about\s+|for\s+)(?P<body>.+)", re.IGNORECASE),
+    # tell [recipient] through/via/by email/mail that/saying/: [body]
+    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:through|via|by)\s+(?:email|mail)\s+(?:that|said\s+that|saying|:)\s+(?P<body>.+)", re.IGNORECASE),
+    # send an email/mail to [recipient] "body"
+    re.compile(r"^send\s+(?:an?\s+)?(?:email|mail)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<body>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
 ]
 
 EMAIL_RECIPIENT_ONLY_PATTERNS = [
-    re.compile(r"^send\s+(?:an\s+)?email\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
-    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an\s+)?email$", re.IGNORECASE),
+    re.compile(r"^send\s+(?:an?\s+)?(?:email|mail)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:an?\s+)?(?:email|mail)$", re.IGNORECASE),
     re.compile(r"^(?:email|mail)\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
 ]
 
