@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 512
     GEMINI_API_KEY: str = ""
+    SLM_MODEL_PATH: str = "./slm_v1_adapter"
+    SLM_BASE_MODEL: str = "Qwen/Qwen3-4B-Base"
 
     # ── Email (future) ───────────────────────────────────────────
     SMTP_HOST: str = ""

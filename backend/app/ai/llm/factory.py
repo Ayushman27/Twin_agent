@@ -7,7 +7,10 @@ from app.core.config import settings
 
 def get_ai_provider() -> AIProvider:
     provider = settings.LLM_PROVIDER.lower()
-    if provider == "gemini" or (settings.GEMINI_API_KEY and provider != "mock" and provider != "openai"):
+    if provider == "slm":
+        from app.ai.llm.slm_provider import SLMProvider
+        return SLMProvider()
+    elif provider == "gemini" or (settings.GEMINI_API_KEY and provider != "mock" and provider != "openai"):
         from app.ai.llm.gemini_provider import GeminiLLMProvider
         return GeminiLLMProvider()
     elif provider == "openai":
