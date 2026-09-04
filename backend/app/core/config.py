@@ -76,12 +76,18 @@ class Settings(BaseSettings):
     STORAGE_BUCKET: str = "twin-agent-uploads"
     MAX_UPLOAD_SIZE_MB: int = 50
 
-    # ── LLM ──────────────────────────────────────────────────
     LLM_PROVIDER: str = "mock"
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 512
     GEMINI_API_KEY: str = ""
+
+    # ── NVIDIA NeMo Speech ─────────────────────────────────────────
+    NVIDIA_NEMO_SERVER_URL: Optional[str] = None
+    NVIDIA_NGC_API_KEY: Optional[str] = None
+    NVIDIA_NEMO_TTS_VOICE: str = "en_US-Male-1"
+    NVIDIA_NEMO_ASR_MODEL: str = "stt_en_fastconformer_ctc_large"
+    SPEECH_PROVIDER: str = "nemo"
 
     # ── Email (future) ───────────────────────────────────────────
     SMTP_HOST: str = ""

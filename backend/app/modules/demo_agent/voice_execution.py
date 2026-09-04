@@ -63,6 +63,16 @@ TRAILING_PHRASES = [
     r"\s+through\s+(?:the\s+)?twin\s+agent.*$",
 ]
 
+TRAILING_WAKE_WORD_RE = re.compile(r"\s+(?:echo|eco|eko|voice\s+agent)$", re.IGNORECASE)
+
+SELF_NAMES = {"echo", "eco", "eko", "voice agent", "assistant", "ai", "twin agent", "echo agent", "twin", "me", "myself", "you"}
+
+def is_wake_word_or_self_reference(name: Optional[str]) -> bool:
+    if not name:
+        return False
+    clean = name.strip().lower()
+    return clean in SELF_NAMES
+
 def _clean_prompt(prompt: str) -> str:
     cleaned = (prompt or "").strip()
     while True:
@@ -70,6 +80,8 @@ def _clean_prompt(prompt: str) -> str:
         if not m:
             break
         cleaned = cleaned[m.end():].strip()
+    # Strip trailing wake word if user said e.g. "hello Eco"
+    cleaned = TRAILING_WAKE_WORD_RE.sub("", cleaned).strip()
     return cleaned
 
 def _clean_extracted_text(text: str) -> str:
@@ -128,7 +140,7 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
             rec = match.group("recipient").strip()
             raw_text = match.group("text").strip()
             cleaned_txt = _clean_extracted_text(raw_text)
-            if rec and cleaned_txt:
+            if rec and cleaned_txt and not is_wake_word_or_self_reference(rec):
                 return {"is_messaging": True, "recipient": rec, "text": cleaned_txt}
 
     # 3. Match Generic "I want to send a message"
@@ -141,7 +153,7 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
         match = pat.search(clean_p)
         if match:
             rec = match.group("recipient").strip()
-            if rec:
+            if rec and not is_wake_word_or_self_reference(rec):
                 return {"is_messaging": True, "recipient": rec, "text": None}
 
     # 3. Check multi-turn conversation history for pending recipient
@@ -165,7 +177,7 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
                                 rec_name = candidate
                                 break
                 cleaned_txt = _clean_extracted_text(prompt)
-                if rec_name and rec_name.lower() not in ["her", "him", "them"] and cleaned_txt:
+                if rec_name and rec_name.lower() not in ["her", "him", "them"] and not is_wake_word_or_self_reference(rec_name) and cleaned_txt:
                     return {"is_messaging": True, "recipient": rec_name, "text": cleaned_txt}
 
     # 4. LLM Extraction using History + Current Prompt
@@ -188,8 +200,10 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
             '  "text": "exact message body to send or null"\n'
             "}\n"
             "Rules:\n"
+            "- If the user is simply greeting the assistant (e.g. 'hello Echo', 'hi Eco', 'hey Echo'), set is_messaging to false.\n"
+            "- 'Echo', 'Eco', 'Eko', and 'Voice Agent' are the AI assistant's name and wake words, NOT employee recipients.\n"
+            "- Do NOT extract 'Echo', 'Eco', 'Eko', or 'Assistant' as a recipient.\n"
             "- If the user previously asked to send a message to a person (e.g. in history) and is now supplying the message text in the current input, extract the recipient from history and text from current input.\n"
-            "- Do NOT invent message text if none was provided by the user.\n"
             "- Output valid JSON only."
         )
 
@@ -201,9 +215,12 @@ async def extract_messaging_intent(prompt: str, history: List[Dict[str, str]]) -
             if parsed.get("is_messaging"):
                 rec = parsed.get("recipient")
                 txt = parsed.get("text")
+                clean_rec = rec.strip() if isinstance(rec, str) and rec.strip() and rec.lower() != "null" else None
+                if is_wake_word_or_self_reference(clean_rec):
+                    return {"is_messaging": False, "recipient": None, "text": None}
                 return {
                     "is_messaging": True,
-                    "recipient": rec.strip() if isinstance(rec, str) and rec.strip() and rec.lower() != "null" else None,
+                    "recipient": clean_rec,
                     "text": _clean_extracted_text(txt) if isinstance(txt, str) and txt.strip() and txt.lower() != "null" else None,
                 }
     except Exception:

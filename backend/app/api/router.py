@@ -16,6 +16,7 @@ from app.api.agentic.groups import router as agent_groups_router
 from app.api.agentic.capabilities import router as agent_capabilities_router
 from app.api.agentic.executions import router as agent_executions_router
 from app.api.v1.endpoints.gemini_live import router as gemini_live_router
+from app.api.v1.endpoints.nemo_speech import router as nemo_speech_router
 from app.api.v1.endpoints.messaging import router as messaging_router
 from app.integrations.telegram.router import router as telegram_router
 
@@ -33,6 +34,7 @@ api_router.include_router(desktop_router,    prefix="/desktop",       tags=["Des
 api_router.include_router(demo_router,       prefix="/demo-agent",    tags=["Demo Agent"])
 api_router.include_router(api_health_router, prefix="/health",        tags=["Health"])
 api_router.include_router(gemini_live_router, prefix="",              tags=["Gemini Live Voice"])
+api_router.include_router(nemo_speech_router, prefix="/nemo-speech",  tags=["NVIDIA NeMo Speech-to-Speech"])
 
 # Dynamic Agentic Layer Endpoints
 api_router.include_router(agent_groups_router,       prefix="", tags=["Agent Groups"])

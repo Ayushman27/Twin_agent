@@ -363,7 +363,7 @@ async def get_history(
     except Exception as exc:
         logger.warning("Failed querying DB history: %s", exc)
 
-    # Merge DB and in-memory messages with strict content-signature deduplication
+    # Merge DB and in-memory messages with ID and timestamp-minute aware deduplication
     seen_ids = set()
     seen_signatures = set()
     combined = []
@@ -371,7 +371,8 @@ async def get_history(
     # Process DB messages first (they are authoritative)
     for m in db_messages:
         mid = m.get("id")
-        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}"
+        ts_min = (m.get("timestamp") or "")[:16]
+        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}|{ts_min}"
         if mid not in seen_ids and sig not in seen_signatures:
             seen_ids.add(mid)
             seen_signatures.add(sig)
@@ -380,7 +381,8 @@ async def get_history(
     # Process in-memory messages if not already in DB
     for m in in_memory:
         mid = m.get("id")
-        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}"
+        ts_min = (m.get("timestamp") or "")[:16]
+        sig = f"{m.get('from')}|{m.get('to')}|{m.get('text')}|{ts_min}"
         if mid not in seen_ids and sig not in seen_signatures:
             seen_ids.add(mid)
             seen_signatures.add(sig)

@@ -28,6 +28,7 @@ import {
   Square
 } from "lucide-react";
 import { useGeminiLive } from "@/hooks/use-gemini-live";
+import { useNemoSpeech } from "@/hooks/use-nemo-speech";
 
 interface Task {
   id: string;
@@ -217,7 +218,8 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
-  // AI Voice Output Interface State
+  // AI Voice Output Interface State & Speech Engine Selector
+  const [speechEngine, setSpeechEngine] = useState<"nemo" | "gemini">("nemo");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [voiceText, setVoiceText] = useState("");
@@ -225,7 +227,7 @@ export default function HomePage() {
     {
       id: "msg-1",
       sender: "ai",
-      text: "Hello! I am Echo, your AI Twin Voice Assistant. Say 'Echo' followed by your question to talk to me.",
+      text: "Hello! I am Echo, your AI Twin Voice Assistant powered by NVIDIA NeMo S2S (FastConformer + FastPitch). Say 'Echo' followed by your prompt to speak with me.",
       timestamp: "10:40 AM",
     },
   ]);
@@ -238,6 +240,18 @@ export default function HomePage() {
     ]);
   };
 
+  const nemoSpeech = useNemoSpeech({
+    userId: user?.id,
+    userName: user?.name,
+    voice: "en_US-Male-1",
+    onTranscript: (sender, text) => {
+      addMessage(sender, text, true);
+    },
+    onStatusChange: (status) => {
+      setIsSpeaking(status === "speaking");
+    }
+  });
+
   const geminiLive = useGeminiLive({
     userId: user?.id,
     userName: user?.name,
@@ -245,13 +259,11 @@ export default function HomePage() {
       addMessage(sender, text, true);
     },
     onStatusChange: (status) => {
-      if (status === "speaking") {
-        setIsSpeaking(true);
-      } else {
-        setIsSpeaking(false);
-      }
+      setIsSpeaking(status === "speaking");
     }
   });
+
+  const activeSpeech = speechEngine === "nemo" ? nemoSpeech : geminiLive;
 
   useEffect(() => {
     // Badge auto-shows once authenticated; mic starts on first click
@@ -304,7 +316,7 @@ export default function HomePage() {
 
     const text = voiceText.trim();
     setVoiceText("");
-    geminiLive.sendTextMessage(text);
+    activeSpeech.sendTextMessage(text);
   };
 
   // Filter Tasks
@@ -519,13 +531,18 @@ export default function HomePage() {
         {/* Voice Assistant Module */}
         <div className="dark-glass rounded p-grid_unit flex flex-col h-full min-h-0 border border-border-tech relative overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border-tech pb-3 mb-4 shrink-0">
+          <div className="flex items-center justify-between border-b border-border-tech pb-3 mb-3 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded bg-primary-container/10 border border-primary-container/20 text-primary-container">
                 <Sparkles size={18} />
               </div>
               <div>
-                <h3 className="font-label-caps text-xs font-bold text-on-surface">Echo — Voice Agent</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-label-caps text-xs font-bold text-on-surface">Echo — Voice Agent</h3>
+                  <span className="font-code-sm text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
+                    NeMo S2S
+                  </span>
+                </div>
                 <span className="font-code-sm text-[10px] text-primary-container flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
                   Say &quot;Echo&quot; to activate
@@ -537,14 +554,14 @@ export default function HomePage() {
                 <button
                   className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 cursor-pointer hover:bg-amber-500/20 transition-colors"
                   onClick={() => {
-                    geminiLive.startListening();
+                    activeSpeech.startListening();
                     setMicReady(true);
                   }}
                 >
                   <Mic size={12} className="animate-pulse" />
                   Tap to Activate
                 </button>
-              ) : geminiLive.isSessionActive ? (
+              ) : activeSpeech.isSessionActive ? (
                 <>
                   <span className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1.5">
                     <Radio size={12} className="animate-pulse" />
@@ -552,7 +569,7 @@ export default function HomePage() {
                   </span>
                   <button
                     className="font-code-sm text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30 flex items-center gap-1 hover:bg-red-500/20 transition-colors"
-                    onClick={() => geminiLive.endSession()}
+                    onClick={() => activeSpeech.endSession()}
                   >
                     <Square size={10} />
                     End
@@ -568,22 +585,65 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Speech Engine Selector Bar */}
+          <div className="flex items-center justify-between px-2 py-1.5 mb-3 rounded bg-surface-container-lowest/60 border border-border-tech/40 shrink-0">
+            <span className="font-code-sm text-[10px] text-on-surface-variant font-medium">Speech Model Engine:</span>
+            <div className="flex items-center gap-1 bg-surface-container/80 p-0.5 rounded border border-border-tech/30">
+              <button
+                type="button"
+                onClick={() => {
+                  if (speechEngine !== "nemo") {
+                    geminiLive.stopListening();
+                    setSpeechEngine("nemo");
+                    if (micReady) {
+                      setTimeout(() => nemoSpeech.startListening(), 100);
+                    }
+                  }
+                }}
+                className={`font-code-sm text-[10px] px-2 py-0.5 rounded transition-all cursor-pointer ${
+                  speechEngine === "nemo"
+                    ? "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 shadow-sm"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                NVIDIA NeMo S2S
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (speechEngine !== "gemini") {
+                    nemoSpeech.stopListening();
+                    setSpeechEngine("gemini");
+                    if (micReady) {
+                      setTimeout(() => geminiLive.startListening(), 100);
+                    }
+                  }
+                }}
+                className={`font-code-sm text-[10px] px-2 py-0.5 rounded transition-all cursor-pointer ${
+                  speechEngine === "gemini"
+                    ? "bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40 shadow-sm"
+                    : "text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                Gemini Live
+              </button>
+            </div>
+          </div>
+
           {/* Non-Clickable Circular Voice Output Hero Section */}
           <div className="flex flex-col items-center justify-center py-1 mb-2 relative shrink-0 select-none">
             {/* Outer Circular Outline Container Frame */}
             <div
               className={`w-32 h-32 rounded-full border-2 flex flex-col items-center justify-center p-2 relative overflow-hidden transition-all duration-300 ${
-                geminiLive.isUserSpeaking
-                  ? "border-[#00ff41] bg-surface-container-lowest/90 shadow-[0_0_40px_rgba(0,255,65,0.6)] scale-105"
-                  : isSpeaking
+                isSpeaking
                   ? "border-amber-400 bg-surface-container-lowest/90 shadow-[0_0_35px_rgba(245,158,11,0.5)]"
-                  : geminiLive.isListening
-                  ? "border-red-500 bg-surface-container-lowest/90 shadow-[0_0_25px_rgba(239,68,68,0.35)]"
+                  : activeSpeech.isListening
+                  ? "border-emerald-500 bg-surface-container-lowest/90 shadow-[0_0_25px_rgba(16,185,129,0.35)]"
                   : "border-[#00ff41]/50 bg-surface-container-lowest/90 shadow-[0_0_15px_rgba(0,255,65,0.25)]"
               }`}
             >
               {/* Particle Canvas Orb */}
-              <VoiceParticleOrb isSpeaking={isSpeaking || geminiLive.isUserSpeaking || geminiLive.isListening} />
+              <VoiceParticleOrb isSpeaking={isSpeaking || activeSpeech.isListening} />
 
               {/* Audio Wave Visualizer Bars inside circular frame */}
               <div className="flex items-center justify-center gap-0.5 h-3 mt-1 w-full px-2">
@@ -591,16 +651,14 @@ export default function HomePage() {
                   <div
                     key={i}
                     className={`w-0.5 rounded-full transition-all duration-300 ${
-                      geminiLive.isUserSpeaking
-                        ? "bg-[#00ff41] animate-bounce"
-                        : isSpeaking
+                      isSpeaking
                         ? "bg-amber-400 animate-pulse"
-                        : geminiLive.isListening
-                        ? "bg-red-400 animate-pulse"
+                        : activeSpeech.isListening
+                        ? "bg-emerald-400 animate-pulse"
                         : "bg-[#00ff41]/60"
                     }`}
                     style={{
-                      height: (isSpeaking || geminiLive.isUserSpeaking || geminiLive.isListening) ? `${Math.max(15, (h * (i % 2 === 0 ? 1 : 0.7)))}%` : "15%",
+                      height: (isSpeaking || activeSpeech.isListening) ? `${Math.max(15, (h * (i % 2 === 0 ? 1 : 0.7)))}%` : "15%",
                       animationDelay: `${i * 0.08}s`,
                     }}
                   />
@@ -610,21 +668,17 @@ export default function HomePage() {
 
             {/* Voice Output Status Label */}
             <span className={`font-label-caps text-[10px] font-semibold mt-1 transition-colors duration-300 ${
-              geminiLive.isUserSpeaking
-                ? "text-[#00ff41] drop-shadow-[0_0_10px_rgba(0,255,65,0.8)] animate-pulse"
-                : isSpeaking
+              isSpeaking
                 ? "text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]"
-                : geminiLive.isListening
-                ? "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                : activeSpeech.isListening
+                ? "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
                 : "text-[#00ff41]"
             }`}>
-              {geminiLive.isUserSpeaking
-                ? "Listening... Audio Input Detected"
-                : isSpeaking
-                ? "AI Twin Speaking Output..."
-                : geminiLive.isListening
-                ? "Gemini Live Mic Streaming..."
-                : "AI Voice Engine • Ready"}
+              {isSpeaking
+                ? "AI Twin Speaking (NeMo Neural TTS)..."
+                : activeSpeech.isListening
+                ? `${speechEngine === "nemo" ? "NVIDIA NeMo S2S" : "Gemini Live"} Mic Active...`
+                : `${speechEngine === "nemo" ? "NVIDIA NeMo Speech-to-Speech Engine" : "Gemini Multimodal Engine"} • Ready`}
             </span>
           </div>
 
