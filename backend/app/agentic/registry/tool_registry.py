@@ -41,6 +41,15 @@ AVAILABLE_TOOLS = [
         "required_permissions": ["messaging:send"],
         "risk_level": "MEDIUM",
         "enabled": True
+    },
+    {
+        "tool_id": "send_email",
+        "name": "Send Email Tool",
+        "description": "Send an email through the authenticated employee's connected Gmail account with recipient resolution and audit logging.",
+        "capabilities": ["send_email", "resolve_recipient"],
+        "required_permissions": ["email:send"],
+        "risk_level": "MEDIUM",
+        "enabled": True
     }
 ]
 

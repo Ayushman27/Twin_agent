@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { organizationService, DetailedMember } from "@shared/services/organization.service";
 import { roleService } from "@shared/services/role.service";
+import { agenticTaskService } from "@shared/services/agentic-task.service";
 import type {
   OrganizationRole,
   EmployeeRoleAssignmentResponse,
@@ -37,6 +38,8 @@ import {
   Clock,
   RotateCcw,
   Info,
+  CheckSquare,
+  Play,
 } from "lucide-react";
 
 export default function PeoplePage() {
@@ -66,6 +69,14 @@ export default function PeoplePage() {
   const [isChangeRoleModalOpen, setIsChangeRoleModalOpen] = useState(false);
   const [selectedTargetRoleId, setSelectedTargetRoleId] = useState<string>("");
   const [isAssigningRole, setIsAssigningRole] = useState(false);
+
+  // Task Assignment Modal State
+  const [isAssignTaskModalOpen, setIsAssignTaskModalOpen] = useState(false);
+  const [taskAssignee, setTaskAssignee] = useState<DetailedMember | null>(null);
+  const [assignedTaskText, setAssignedTaskText] = useState("");
+  const [assignedPriority, setAssignedPriority] = useState<"LOW" | "MEDIUM" | "HIGH" | "URGENT">("MEDIUM");
+  const [assignedAutoExecute, setAssignedAutoExecute] = useState(false);
+  const [isAssigningTask, setIsAssigningTask] = useState(false);
 
   // Auto-hide success notification
   useEffect(() => {
@@ -236,6 +247,42 @@ export default function PeoplePage() {
     }
   };
 
+  // Open Assign Task Modal
+  const openAssignTaskModal = (member?: DetailedMember) => {
+    setTaskAssignee(member ?? members[0] ?? null);
+    setAssignedTaskText("");
+    setAssignedPriority("MEDIUM");
+    setAssignedAutoExecute(false);
+    setIsAssignTaskModalOpen(true);
+  };
+
+  // Handle Confirm Task Assignment
+  const handleConfirmTaskAssignment = async () => {
+    if (!taskAssignee || !assignedTaskText.trim()) return;
+    setIsAssigningTask(true);
+    try {
+      const res = await agenticTaskService.assignTask({
+        employee_id: taskAssignee.user_id || taskAssignee.id,
+        task: assignedTaskText.trim(),
+        organization_id: orgId,
+        role: taskAssignee.job_role_name || taskAssignee.job_title || "Software Engineer",
+        priority: assignedPriority,
+        auto_execute: assignedAutoExecute,
+      });
+
+      setIsAssignTaskModalOpen(false);
+      setSuccessMessage(
+        assignedAutoExecute
+          ? `Task assigned & executed via AI Swarm for ${taskAssignee.name} (Task ID: ${res.task_id}).`
+          : `Task manually assigned to ${taskAssignee.name}'s work queue (Task ID: ${res.task_id}).`
+      );
+    } catch (err: any) {
+      alert(err?.message || "Failed to assign task to employee");
+    } finally {
+      setIsAssigningTask(false);
+    }
+  };
+
   // Extract Departments for Filter
   const departments = useMemo(() => {
     const set = new Set<string>();
@@ -303,6 +350,15 @@ export default function PeoplePage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openAssignTaskModal()}
+            className="px-3.5 py-2 border border-primary-container bg-primary-container/15 hover:bg-primary-container/25 text-primary-container font-code-sm text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-[0_0_10px_rgba(0,255,65,0.15)]"
+          >
+            <CheckSquare size={13} />
+            <span>Assign Task to Employee</span>
+          </button>
+
           <Link
             href="/organization/roles"
             className="px-3 py-2 border border-border-tech hover:border-primary-container/50 hover:bg-surface-layer text-on-surface font-code-sm text-xs flex items-center gap-1.5 transition-colors"
@@ -492,6 +548,16 @@ export default function PeoplePage() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
+                            onClick={() => openAssignTaskModal(member)}
+                            className="px-2.5 py-1 border border-primary-container/60 bg-primary-container/10 hover:bg-primary-container/20 text-primary-container font-code-sm text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Assign a manual task to this employee"
+                          >
+                            <CheckSquare size={12} />
+                            <span>Assign Task</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => openMemberDetailModal(member)}
                             className="px-3 py-1 border border-border-tech hover:border-primary-container/50 hover:bg-surface-layer text-on-surface font-code-sm text-xs flex items-center gap-1 transition-colors cursor-pointer"
                           >
@@ -502,7 +568,7 @@ export default function PeoplePage() {
                           <button
                             type="button"
                             onClick={() => openChangeRoleModal(member)}
-                            className="px-3 py-1 border border-primary-container/50 bg-primary-container/10 hover:bg-primary-container/20 text-primary-container font-code-sm text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="px-3 py-1 border border-border-tech hover:border-primary-container/50 bg-surface-container-high hover:bg-surface-layer text-on-surface font-code-sm text-xs flex items-center gap-1 transition-colors cursor-pointer"
                           >
                             <span>Change Role</span>
                           </button>
@@ -991,6 +1057,128 @@ export default function PeoplePage() {
                   <span>Confirm Role Assignment</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ASSIGN TASK TO EMPLOYEE ──────────────────────────── */}
+      {isAssignTaskModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="border border-border-tech bg-surface-container-low w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-sm shadow-2xl space-y-5 p-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border-tech pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 border border-primary-container/40 bg-primary-container/10 text-primary-container rounded-sm">
+                  <CheckSquare size={18} />
+                </div>
+                <div>
+                  <h2 className="font-display-xl text-lg text-on-surface">Assign Task to Employee</h2>
+                  <p className="font-code-sm text-xs text-on-surface-variant">
+                    Assign a manual task to an employee&apos;s Digital Twin work queue.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAssignTaskModalOpen(false)}
+                className="p-1.5 border border-border-tech hover:border-zinc-500 text-zinc-400 hover:text-white rounded-sm transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <div className="space-y-4 font-code-sm text-xs">
+              {/* Employee Selector */}
+              <div>
+                <label className="block font-bold text-on-surface mb-1">Select Employee:</label>
+                <select
+                  value={taskAssignee?.id || ""}
+                  onChange={(e) => {
+                    const emp = members.find((m) => m.id === e.target.value);
+                    if (emp) setTaskAssignee(emp);
+                  }}
+                  className="w-full bg-surface-container border border-border-tech p-2.5 rounded-sm text-on-surface focus:border-primary-container focus:outline-none"
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name || "Unnamed"} ({m.email}) — Role: {m.job_role_name || m.job_title || "Software Engineer"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Task Description */}
+              <div>
+                <label className="block font-bold text-on-surface mb-1">Task Description &amp; Scope:</label>
+                <textarea
+                  rows={4}
+                  value={assignedTaskText}
+                  onChange={(e) => setAssignedTaskText(e.target.value)}
+                  placeholder="Describe the task for the employee (e.g., 'Analyze query bottleneck in projects module and write index migration')..."
+                  className="w-full bg-surface-container border border-border-tech p-3 rounded-sm text-on-surface placeholder:text-zinc-600 focus:border-primary-container focus:outline-none font-mono"
+                />
+              </div>
+
+              {/* Priority Selector & Auto-execute */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="block font-bold text-on-surface mb-1">Priority:</label>
+                  <select
+                    value={assignedPriority}
+                    onChange={(e) => setAssignedPriority(e.target.value as any)}
+                    className="w-full bg-surface-container border border-border-tech p-2 rounded-sm text-on-surface focus:border-primary-container focus:outline-none"
+                  >
+                    <option value="LOW">Low Priority</option>
+                    <option value="MEDIUM">Medium Priority</option>
+                    <option value="HIGH">High Priority</option>
+                    <option value="URGENT">Urgent Priority</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 bg-surface-container border border-border-tech rounded-sm">
+                    <input
+                      type="checkbox"
+                      checked={assignedAutoExecute}
+                      onChange={(e) => setAssignedAutoExecute(e.target.checked)}
+                      className="accent-[#00ff41]"
+                    />
+                    <span className="text-zinc-300 text-[11px]">Auto-execute immediately with AI Swarm</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border-tech">
+              <button
+                type="button"
+                onClick={() => setIsAssignTaskModalOpen(false)}
+                className="px-4 py-2 border border-border-tech hover:bg-surface-layer text-on-surface font-code-sm text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmTaskAssignment}
+                disabled={isAssigningTask || !assignedTaskText.trim()}
+                className="px-5 py-2 border border-primary-container bg-primary-container/20 hover:bg-primary-container/30 text-primary-container font-code-sm text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isAssigningTask ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Assigning...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare size={13} />
+                    <span>Confirm Task Assignment</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

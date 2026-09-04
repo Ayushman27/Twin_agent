@@ -14,19 +14,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get("access_token")?.value;
-  const userRole = req.cookies.get("user_role")?.value;
+  const token = req.cookies.get("admin_access_token")?.value || req.cookies.get("access_token")?.value;
+  const userRole = req.cookies.get("admin_user_role")?.value || (req.cookies.get("admin_access_token") ? "ORG_ADMIN" : req.cookies.get("user_role")?.value);
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
   const isProtectedRoute =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/organization") ||
     pathname.startsWith("/settings");
-
-  // If user is at /login or /register and already has an admin session -> redirect to /dashboard
-  if (isAuthRoute && token && (userRole === "ORG_ADMIN" || userRole === "SUPER_ADMIN")) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
 
   // If accessing a protected route without token -> redirect to /login
   if (isProtectedRoute && !token) {
@@ -35,8 +30,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If authenticated but role is EMPLOYEE -> block company dashboard access
-  if (isProtectedRoute && token && userRole === "EMPLOYEE") {
+  // If authenticated but role is strictly EMPLOYEE without admin session -> block company dashboard access
+  if (isProtectedRoute && token && !req.cookies.get("admin_access_token") && userRole === "EMPLOYEE") {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("error", "employee_forbidden");
     return NextResponse.redirect(loginUrl);

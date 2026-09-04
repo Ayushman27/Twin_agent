@@ -103,6 +103,25 @@ class Settings(BaseSettings):
     # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
     TELEGRAM_WEBHOOK_SECRET: Optional[str] = None
 
+    # ── Google OAuth & Gmail Integration ──────────────────────────
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/integrations/google/callback"
+    GOOGLE_GMAIL_SCOPES: Union[List[str], str] = ["https://www.googleapis.com/auth/gmail.send"]
+
+    @field_validator("GOOGLE_GMAIL_SCOPES", mode="before")
+    @classmethod
+    def parse_google_scopes(cls, v):
+        if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [s.strip() for s in v_str.split(",") if s.strip()]
+        return v
+
     # ── Rate limiting ─────────────────────────────────────────────
     RATE_LIMIT_PER_MINUTE: int = 60
 

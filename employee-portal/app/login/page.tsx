@@ -10,9 +10,9 @@ function EmployeeLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState("employee@company.ai");
-  const [password, setPassword] = useState("SecureEmployee1");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,12 +28,16 @@ function EmployeeLoginForm() {
         "Access Denied: No active organization membership found for this employee account. Please contact your company administrator."
       );
     } else if (err === "unauthorized") {
-      setErrorMessage("Please sign in to initialize your Digital Twin workspace.");
+      setErrorMessage("Please sign in with your employee credentials to initialize your Digital Twin workspace.");
     }
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim() || !password) {
+      setErrorMessage("Please enter both work email and password.");
+      return;
+    }
     setErrorMessage(null);
     setIsLoading(true);
 
@@ -81,12 +85,6 @@ function EmployeeLoginForm() {
     }
   };
 
-  const fillCredentials = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setErrorMessage(null);
-  };
-
   return (
     <div className="relative z-10 w-full max-w-md glass-panel p-6 sm:p-8 border border-border-tech shadow-2xl animate-fade-in-up">
       {/* Card Header */}
@@ -101,7 +99,7 @@ function EmployeeLoginForm() {
           </span>
         </div>
         <p className="font-code-sm text-xs text-on-surface-variant">
-          Authenticate to sync your personal Human Digital Twin, task streams, and agentic workflows.
+          Authenticate with your credentials to sync your personal Human Digital Twin, task streams, and agentic workflows.
         </p>
       </div>
 
@@ -139,9 +137,10 @@ function EmployeeLoginForm() {
             <input
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="employee@company.ai"
+              placeholder="Enter your work email"
               className="w-full bg-surface-container-low border border-border-tech pl-9 pr-3 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
             />
           </div>
@@ -161,9 +160,10 @@ function EmployeeLoginForm() {
             <input
               type={showPassword ? "text" : "password"}
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
+              placeholder="Enter your password"
               className="w-full bg-surface-container-low border border-border-tech pl-9 pr-10 py-2.5 font-code-sm text-sm text-on-surface placeholder:text-neutral-600 focus:border-primary-container focus:outline-none transition-colors"
             />
             <button
@@ -194,7 +194,7 @@ function EmployeeLoginForm() {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !email.trim() || !password}
           className="w-full py-3 mt-2 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
         >
           {isLoading ? (
@@ -210,57 +210,6 @@ function EmployeeLoginForm() {
           )}
         </button>
       </form>
-
-      {/* Quick Testing Credentials helper */}
-      <div className="mt-6 pt-5 border-t border-border-tech">
-        <div className="font-label-caps text-[10px] text-on-surface-variant uppercase mb-2 flex items-center justify-between">
-          <span>Quick Test Credentials</span>
-          <span className="text-primary-container flex items-center gap-1">
-            <CheckCircle2 size={10} /> Ready
-          </span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => fillCredentials("employee@company.ai", "SecureEmployee1")}
-            className="p-2 text-left bg-surface-container-low border border-border-tech hover:border-primary-container text-xs transition-colors rounded-sm group"
-          >
-            <div className="font-code-sm text-primary-container font-bold group-hover:text-primary-fixed truncate">
-              EMPLOYEE
-            </div>
-            <div className="font-code-sm text-[9px] text-on-surface-variant truncate">
-              Affiliated (Valid)
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => fillCredentials("unaffiliated@company.ai", "SecureUnaffiliated1")}
-            className="p-2 text-left bg-surface-container-low border border-border-tech hover:border-error-container text-xs transition-colors rounded-sm group"
-          >
-            <div className="font-code-sm text-error font-bold group-hover:text-error-container truncate">
-              NO ORG
-            </div>
-            <div className="font-code-sm text-[9px] text-on-surface-variant truncate">
-              Rejection Test
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => fillCredentials("admin@company.ai", "SecureAdmin1")}
-            className="p-2 text-left bg-surface-container-low border border-border-tech hover:border-error-container text-xs transition-colors rounded-sm group"
-          >
-            <div className="font-code-sm text-on-surface font-bold group-hover:text-primary-container truncate">
-              ORG_ADMIN
-            </div>
-            <div className="font-code-sm text-[9px] text-on-surface-variant truncate">
-              Admin Restriction
-            </div>
-          </button>
-        </div>
-      </div>
 
       {/* Registration CTA */}
       <div className="mt-6 pt-4 border-t border-border-tech text-center">
