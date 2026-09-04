@@ -332,7 +332,7 @@ class CommunicationService:
     ) -> None:
         """Broadcast message event to active frontend WebSockets."""
         try:
-            from app.api.v1.endpoints.messaging import broadcast_message_event
+            from app.api.v1.endpoints.messaging import broadcast_message_event, _history, _convo_key
             payload = {
                 "type": "message",
                 "id": msg_id,
@@ -342,6 +342,9 @@ class CommunicationService:
                 "text": text,
                 "timestamp": _now_iso(),
             }
+            key = _convo_key(sender_id, receiver_id)
+            _history[key].append(payload)
+
             await broadcast_message_event(payload)
         except Exception as exc:
             logger.warning("Failed broadcasting WebSocket event: %s", exc)
