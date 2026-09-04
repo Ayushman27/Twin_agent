@@ -569,9 +569,16 @@ async def execute_voice_prompt(
 
                 if res.get("success"):
                     resolved_name = res.get("recipient", matched_recipient)
-                    reply = f"I've sent the message to {resolved_name} via Telegram."
+                    if res.get("telegram_sent"):
+                        reply = f"I've sent the message to {resolved_name} via Telegram."
+                    else:
+                        reply = f"I've sent the message to {resolved_name} via the platform chat."
                 else:
-                    reply = f"Could not send message: {res.get('error', 'unknown error')}."
+                    err_msg = res.get("message") or res.get("error") or res.get("user_message") or "could not find the recipient"
+                    if res.get("error_code") == "AMBIGUOUS_RECIPIENT":
+                        reply = err_msg
+                    else:
+                        reply = f"Could not send message: {err_msg}."
 
                 return {
                     "output": reply,

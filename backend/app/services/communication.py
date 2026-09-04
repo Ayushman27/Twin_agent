@@ -70,9 +70,8 @@ class CommunicationService:
         # 1. Search Users table from Neon PostgreSQL / active identity session
         from app.db.postgres import get_neon_session_maker
         neon_maker = get_neon_session_maker()
-        identity_session_factory = neon_maker if neon_maker is not None else lambda: self.db
 
-        async with identity_session_factory() as id_session:
+        async def _query_users(session_to_use: AsyncSession) -> List[User]:
             stmt = select(User).where(
                 or_(
                     User.id == clean,
@@ -80,63 +79,73 @@ class CommunicationService:
                     User.name.ilike(f"%{clean}%"),
                 )
             )
-            res = await id_session.execute(stmt)
-            users: List[User] = res.scalars().all()
+            r = await session_to_use.execute(stmt)
+            found: List[User] = list(r.scalars().all())
 
-            if not users:
-                res_local = await self.db.execute(stmt)
-                users = res_local.scalars().all()
-
-            # If full name search yielded no match, fallback to first-name search (e.g. 'Shreyasi' from 'Shreyasi Panigrahi')
-            if not users and " " in clean:
+            # If full name search yielded no match, fallback to first-name search
+            if not found and " " in clean:
                 first_name = clean.split()[0].strip()
                 if len(first_name) >= 3:
                     stmt_fn = select(User).where(User.name.ilike(f"%{first_name}%"))
-                    res_fn = await id_session.execute(stmt_fn)
-                    users = res_fn.scalars().all()
-                    if not users:
-                        res_fn_local = await self.db.execute(stmt_fn)
-                        users = res_fn_local.scalars().all()
+                    r_fn = await session_to_use.execute(stmt_fn)
+                    found = list(r_fn.scalars().all())
 
-            # If still no match, fallback to prefix search (e.g. 'Shre' prefix)
-            if not users and len(clean) >= 3:
-                prefix = clean[:4] if len(clean) >= 4 else clean
-                stmt_pref = select(User).where(User.name.ilike(f"%{prefix}%"))
-                res_pref = await id_session.execute(stmt_pref)
-                users = res_pref.scalars().all()
-                if not users:
-                    res_pref_local = await self.db.execute(stmt_pref)
-                    users = res_pref_local.scalars().all()
-
-            # If no direct user match in DB, check TelegramIdentity by username or chat_id
-            if not users:
-                stmt_tg = select(TelegramIdentity).where(
+            # If still no match, fallback to phonetic / normalized prefix search (e.g. Shreyasi <-> Shreyashi -> 'shreyas')
+            if not found and len(clean) >= 4:
+                prefix = clean[:5].lower().replace("sh", "s")
+                # Also try standard prefix
+                std_prefix = clean[:4]
+                stmt_pref = select(User).where(
                     or_(
-                        TelegramIdentity.telegram_username.ilike(clean.lstrip("@")),
-                        TelegramIdentity.user_id == clean,
+                        User.name.ilike(f"%{std_prefix}%"),
+                        User.email.ilike(f"%{std_prefix}%"),
                     )
                 )
-                res_tg = await self.db.execute(stmt_tg)
-                tg_identities = res_tg.scalars().all()
-                if tg_identities:
-                    # Find user for this identity
-                    user_id = tg_identities[0].user_id
-                    user_res = await id_session.execute(select(User).where(User.id == user_id))
-                    u = user_res.scalar_one_or_none()
-                    if u:
-                        users = [u]
+                r_pref = await session_to_use.execute(stmt_pref)
+                found = list(r_pref.scalars().all())
 
-            # Deduplicate users by unique ID
-            unique_users = {}
-            for u in users:
-                if u.id not in unique_users:
-                    unique_users[u.id] = u
-            users = list(unique_users.values())
+            return found
+
+        if neon_maker is not None:
+            async with neon_maker() as id_session:
+                users = await _query_users(id_session)
+        else:
+            users = await _query_users(self.db)
+
+        # Also search in local DB if neon yielded nothing
+        if not users and neon_maker is not None:
+            users = await _query_users(self.db)
+
+        # If no direct user match in DB, check TelegramIdentity by username or chat_id
+        if not users:
+            stmt_tg = select(TelegramIdentity).where(
+                or_(
+                    TelegramIdentity.telegram_username.ilike(clean.lstrip("@")),
+                    TelegramIdentity.user_id == clean,
+                )
+            )
+            res_tg = await self.db.execute(stmt_tg)
+            tg_identities = res_tg.scalars().all()
+            if tg_identities:
+                user_id = tg_identities[0].user_id
+                if neon_maker is not None:
+                    async with neon_maker() as id_session:
+                        user_res = await id_session.execute(select(User).where(User.id == user_id))
+                        u = user_res.scalar_one_or_none()
+                else:
+                    user_res = await self.db.execute(select(User).where(User.id == user_id))
+                    u = user_res.scalar_one_or_none()
+                if u:
+                    users = [u]
+
+        # Deduplicate users by unique ID
+        unique_users = {}
+        for u in users:
+            if u.id not in unique_users:
+                unique_users[u.id] = u
+        users = list(unique_users.values())
 
         if not users:
-            # Fallback: Check if the clean string itself is an active demo/peer user_id string
-            # e.g. "employee-demo" or "employee-xyz" or "Rahul"
-            # If so, create a virtual lookup attempt
             return {
                 "success": False,
                 "error_code": "RECIPIENT_NOT_FOUND",
@@ -144,13 +153,29 @@ class CommunicationService:
             }
 
         if len(users) > 1 and sender_id:
-            # 1. Filter out sender if sender matches clean name search
+            # 1. Filter out sender if sender matches clean name search and there are other recipients
             other_users = [u for u in users if u.id != sender_id]
-            if len(other_users) == 1:
+            if len(other_users) >= 1:
                 users = other_users
 
         if len(users) > 1:
-            # 2. Prefer user with linked Telegram identity
+            # 2. Check if all matched users have the same normalized name (e.g. duplicate accounts for same person)
+            unique_names = {u.name.strip().lower() for u in users}
+            if len(unique_names) == 1:
+                # Prefer one with linked Telegram identity
+                stmt_linked = select(TelegramIdentity.user_id).where(
+                    TelegramIdentity.user_id.in_([u.id for u in users])
+                )
+                res_linked = await self.db.execute(stmt_linked)
+                linked_ids = set(res_linked.scalars().all())
+                linked_users = [u for u in users if u.id in linked_ids]
+                if linked_users:
+                    users = [linked_users[0]]
+                else:
+                    users = [users[0]]
+
+        if len(users) > 1:
+            # 3. Prefer user with linked Telegram identity among different names
             stmt_linked = select(TelegramIdentity.user_id).where(
                 TelegramIdentity.user_id.in_([u.id for u in users])
             )
@@ -161,17 +186,24 @@ class CommunicationService:
                 users = linked_users
 
         if len(users) > 1:
-            names = ", ".join([u.name for u in users[:3]])
+            # 4. Check for exact name match
+            exact_matches = [u for u in users if u.name.strip().lower() == clean.lower() or u.name.strip().lower().startswith(clean.lower())]
+            if len(exact_matches) == 1:
+                users = exact_matches
+
+        if len(users) > 1:
+            descriptions = [f"{u.name} ({u.email})" if u.email else u.name for u in users[:3]]
+            names_desc = ", ".join(descriptions)
             return {
                 "success": False,
                 "error_code": "AMBIGUOUS_RECIPIENT",
-                "message": f"Found multiple employees matching '{clean}': {names}. Which one do you mean?",
-                "matches": [{"user_id": u.id, "name": u.name} for u in users],
+                "message": f"Found multiple employees matching '{clean}': {names_desc}. Which one do you mean?",
+                "matches": [{"user_id": u.id, "name": u.name, "email": u.email} for u in users],
             }
 
         target_user = users[0]
 
-        # 2. Check Telegram connection for target_user
+        # Check Telegram connection for target_user
         stmt_link = select(TelegramIdentity).where(
             TelegramIdentity.user_id == target_user.id
         )
@@ -179,18 +211,6 @@ class CommunicationService:
         tg_identity = res_link.scalar_one_or_none()
 
         if not tg_identity:
-            # Check if there is a TelegramIdentity matching target_user's name or email if user.id is string
-            stmt_alt = select(TelegramIdentity).where(
-                or_(
-                    TelegramIdentity.telegram_first_name.ilike(f"%{target_user.name}%"),
-                    TelegramIdentity.telegram_username.ilike(target_user.name.replace(" ", "")),
-                )
-            )
-            res_alt = await self.db.execute(stmt_alt)
-            tg_identity = res_alt.scalar_one_or_none()
-
-        if not tg_identity:
-            # Check if there is a TelegramIdentity matching target_user's name or email if user.id is string
             stmt_alt = select(TelegramIdentity).where(
                 or_(
                     TelegramIdentity.telegram_first_name.ilike(f"%{target_user.name}%"),
