@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ── In-memory connection registry ─────────────────────────────────────────────
-# user_id → active WebSocket connection (one connection per user)
-_connections: Dict[str, WebSocket] = {}
+# user_id → set of active WebSocket connections (supports multiple open tabs/devices)
+_connections: Dict[str, set] = defaultdict(set)
 
 # In-memory message history: (user_a, user_b) sorted key → deque of messages
 # In production replace with Redis Streams or a DB table.
@@ -53,17 +53,45 @@ async def broadcast_message_event(payload: dict) -> None:
     """
     sender_id = payload.get("from")
     to_user = payload.get("to")
-    payload_str = json.dumps(payload)
+    if sender_id and to_user:
+        key = _convo_key(sender_id, to_user)
+        _history[key].append(payload)
 
+    payload_str = json.dumps(payload)
     target_uids = {uid for uid in [sender_id, to_user] if uid}
+
+    # Also resolve aliases for target_uids
+    all_target_sockets = set()
     for uid in target_uids:
-        ws = _connections.get(uid)
-        if ws:
+        all_target_sockets.update(_connections.get(uid, set()))
+
+    # If some target sockets not found directly by ID, resolve from DB
+    for uid in list(target_uids):
+        if not _connections.get(uid):
             try:
-                await ws.send_text(payload_str)
-            except Exception as exc:
-                logger.warning("Failed to push WS event to %s: %s", uid, exc)
-                _connections.pop(uid, None)
+                from app.core.database import AsyncSessionLocal
+                from app.db.postgres import get_neon_session_maker
+                from app.modules.auth.models import User
+                from sqlalchemy import select, or_
+                neon_maker = get_neon_session_maker()
+                id_fac = neon_maker if neon_maker is not None else AsyncSessionLocal
+                async with id_fac() as id_session:
+                    r_u = await id_session.execute(select(User).where(or_(User.id == uid, User.email.ilike(uid), User.name.ilike(uid))))
+                    target_u = r_u.scalars().first()
+                    if target_u:
+                        all_target_sockets.update(_connections.get(target_u.id, set()))
+                        if target_u.email:
+                            all_target_sockets.update(_connections.get(target_u.email, set()))
+                        if target_u.name:
+                            all_target_sockets.update(_connections.get(target_u.name, set()))
+            except Exception:
+                pass
+
+    for ws in list(all_target_sockets):
+        try:
+            await ws.send_text(payload_str)
+        except Exception as exc:
+            logger.warning("Failed to push WS event: %s", exc)
 
 
 async def _broadcast_presence(user_id: str, online: bool) -> None:
@@ -74,20 +102,18 @@ async def _broadcast_presence(user_id: str, online: bool) -> None:
         "online": online,
         "timestamp": _now_iso(),
     })
-    dead = []
     sent_sockets = set()
-    for uid, ws in list(_connections.items()):
-        if ws in sent_sockets:
-            continue
-        sent_sockets.add(ws)
+    for uid, socket_set in list(_connections.items()):
         if uid == user_id:
             continue
-        try:
-            await ws.send_text(payload)
-        except Exception:
-            dead.append(uid)
-    for uid in dead:
-        _connections.pop(uid, None)
+        for ws in list(socket_set):
+            if ws in sent_sockets:
+                continue
+            sent_sockets.add(ws)
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                socket_set.discard(ws)
 
 
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
@@ -104,16 +130,8 @@ async def messaging_ws(
     await websocket.accept()
     logger.info("WS connect: user_id=%s", user_id)
 
-    # Register connection (replace any stale one)
-    old_ws = _connections.get(user_id)
-    if old_ws and old_ws is not websocket:
-        try:
-            await old_ws.close(code=1001, reason="replaced")
-        except Exception:
-            pass
-
     # Store connection under user_id + resolve email/name aliases
-    _connections[user_id] = websocket
+    _connections[user_id].add(websocket)
     try:
         from app.core.database import AsyncSessionLocal
         from app.db.postgres import get_neon_session_maker
@@ -125,11 +143,11 @@ async def messaging_ws(
             r = await id_session.execute(select(User).where(or_(User.id == user_id, User.email == user_id, User.name == user_id)))
             u = r.scalars().first()
             if u:
-                _connections[u.id] = websocket
+                _connections[u.id].add(websocket)
                 if u.email:
-                    _connections[u.email] = websocket
+                    _connections[u.email].add(websocket)
                 if u.name:
-                    _connections[u.name] = websocket
+                    _connections[u.name].add(websocket)
     except Exception:
         pass
 
@@ -139,7 +157,7 @@ async def messaging_ws(
     # Send current online list to the newly connected client
     await websocket.send_text(json.dumps({
         "type": "online_list",
-        "users": list(set(_connections.keys())),
+        "users": [k for k, v in _connections.items() if v],
         "timestamp": _now_iso(),
     }))
 
@@ -228,8 +246,8 @@ async def messaging_ws(
                     logger.warning("DB/Telegram persistence error in WS message: %s", exc)
 
                 # Deliver to recipient via WebSocket if online
-                recipient_ws = _connections.get(to_user)
-                if not recipient_ws:
+                recipient_sockets = set(_connections.get(to_user, set()))
+                if not recipient_sockets:
                     try:
                         from app.core.database import AsyncSessionLocal
                         from app.db.postgres import get_neon_session_maker
@@ -241,19 +259,24 @@ async def messaging_ws(
                             r_u = await id_session.execute(select(User).where(or_(User.id == to_user, User.email.ilike(to_user), User.name.ilike(to_user))))
                             target_u = r_u.scalars().first()
                             if target_u:
-                                recipient_ws = _connections.get(target_u.id) or _connections.get(target_u.email) or _connections.get(target_u.name)
+                                recipient_sockets.update(_connections.get(target_u.id, set()))
+                                if target_u.email:
+                                    recipient_sockets.update(_connections.get(target_u.email, set()))
+                                if target_u.name:
+                                    recipient_sockets.update(_connections.get(target_u.name, set()))
                     except Exception:
                         pass
 
-                if recipient_ws:
+                for r_ws in list(recipient_sockets):
                     try:
-                        await recipient_ws.send_text(json.dumps({
+                        await r_ws.send_text(json.dumps({
                             **msg_payload,
                             "delivered": True,
                         }))
                         delivered_ws = True
                     except Exception as exc:
                         logger.warning("Failed to deliver to %s: %s", to_user, exc)
+                        recipient_sockets.discard(r_ws)
 
                 # Confirmation back to sender
                 await websocket.send_text(json.dumps({
@@ -277,9 +300,10 @@ async def messaging_ws(
         logger.exception("WS error for user_id=%s: %s", user_id, exc)
     finally:
         for k in list(_connections.keys()):
-            if _connections.get(k) is websocket:
+            _connections[k].discard(websocket)
+            if not _connections[k]:
                 _connections.pop(k, None)
-        await _broadcast_presence(user_id, online=False)
+        await _broadcast_presence(user_id, online=bool(_connections.get(user_id)))
 
 
 # ── REST helpers ───────────────────────────────────────────────────────────────

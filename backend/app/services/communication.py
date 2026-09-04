@@ -253,8 +253,9 @@ class CommunicationService:
         convo_id = _convo_key(sender_id, target_user_id)
 
         # 1. Create SENT Message record in DB
+        msg_id = message_id or str(uuid.uuid4())
         msg = Message(
-            id=message_id or str(uuid.uuid4()),
+            id=msg_id,
             conversation_id=convo_id,
             sender_id=sender_id,
             receiver_id=target_user_id,
@@ -265,6 +266,27 @@ class CommunicationService:
         )
         self.db.add(msg)
         await self.db.commit()
+
+        # Also persist to local SQLite agent DB if self.db is Neon or vice-versa
+        try:
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as local_session:
+                existing = await local_session.get(Message, msg_id)
+                if not existing:
+                    local_msg = Message(
+                        id=msg_id,
+                        conversation_id=convo_id,
+                        sender_id=sender_id,
+                        receiver_id=target_user_id,
+                        channel="telegram" if (telegram_connected and chat_id) else "websocket",
+                        content=content,
+                        chat_id=chat_id,
+                        status="SENT",
+                    )
+                    local_session.add(local_msg)
+                    await local_session.commit()
+        except Exception:
+            pass
 
         # 2. Broadcast real-time event to connected WebSockets & in-memory history
         await self._broadcast_to_websockets(

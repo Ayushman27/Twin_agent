@@ -24,6 +24,11 @@ LEADING_NOISE_RE = re.compile(
 
 from app.services.email_context_service import EmailContextService
 
+REC_WORD = r"(?!an?\b|the\b|to\b)[a-zA-Z0-9_]+"
+REC_LAZY = r"(?P<recipient>" + REC_WORD + r"(?:\s+" + REC_WORD + r")*?)"
+REC_1_2 = r"(?P<recipient>" + REC_WORD + r"(?:\s+" + REC_WORD + r"){0,2})"
+DELIM = r"(?:\s+(?:saying|said\s+that|that|for|about)\s*|\s*[:,-]\s*)"
+
 # ── 1. EMAIL INTENT PATTERNS ──────────────────────────────────────────────────
 EMAIL_FULL_PATTERNS = [
     # send [recipient] an email/mail about [subject] saying/said that/that/: [body]
@@ -37,7 +42,7 @@ EMAIL_FULL_PATTERNS = [
     # email/mail [recipient] saying/said that/that/: [body]
     re.compile(r"^(?:email|mail)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|said\s+that|that|for|about|:)\s+(?P<body>.+)", re.IGNORECASE),
     # send [recipient] an email/update on/for [project/topic]
-    re.compile(r"^(?:send\s+(?:an?\s+)?(?:email|mail)\s+to|email|mail|send)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:the\s+latest\s+update\s+on\s+|an?\s+(?:email|mail)\s+with\s+the\s+latest\s+update\s+on\s+|an?\s+update\s+on\s+|about\s+|for\s+)(?P<body>.+)", re.IGNORECASE),
+    re.compile(r"^(?:send\s+(?:an?\s+)?(?:email|mail)\s+to|email|mail)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:the\s+latest\s+update\s+on\s+|an?\s+(?:email|mail)\s+with\s+the\s+latest\s+update\s+on\s+|an?\s+update\s+on\s+|about\s+|for\s+)(?P<body>.+)", re.IGNORECASE),
     # tell [recipient] through/via/by email/mail that/saying/: [body]
     re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:through|via|by)\s+(?:email|mail)\s+(?:that|said\s+that|saying|:)\s+(?P<body>.+)", re.IGNORECASE),
     # send an email/mail to [recipient] "body"
@@ -75,24 +80,32 @@ EDIT_BODY_PATTERNS = [
 
 # ── 2. MESSAGING (TELEGRAM/PLATFORM) PATTERNS ────────────────────────────────
 MSG_FULL_PATTERNS = [
-    # send a hi/hello to [recipient]
-    re.compile(r"^send\s+(?:a\s+)?(?P<text>hi|hello|hey|greeting|greetings|update)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
-    # say hi/hello to [recipient]
-    re.compile(r"^say\s+(?P<text>hi|hello|hey)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
-    # send a message/msg/note/text to [recipient] saying/that/: [text]
-    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
-    # send a message/msg/note/text to [recipient] "text"
-    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
-    # send a message/msg/note/text to [recipient] to [text]
-    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)\s+to\s+(?P<text>.+)", re.IGNORECASE),
-    # send [recipient] a message/msg/note/text/hi/hello saying/that/: "text"
-    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:a\s+)?(?:msg|message|note|text|hi|hello)\s+(?:saying|that|:|\"|')\s*(?P<text>.+)", re.IGNORECASE),
-    # tell [recipient] that/saying/: [text]
-    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)\s+(?:that|saying|:)\s+(?P<text>.+)", re.IGNORECASE),
-    # message/text [recipient] saying/that/: "text"
-    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)\s+(?:saying|that|:)\s+(?P<text>.+)", re.IGNORECASE),
-    # message/text [recipient] "text"
-    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # send/write/drop/shoot (a) message/note/text to [recipient] DELIM [text]
+    re.compile(r"^(?:send|write|drop|shoot)\s+(?:an?\s+)?(?:msg|message|note|text)\s+to\s+" + REC_LAZY + DELIM + r"\s*(?P<text>.+)$", re.IGNORECASE),
+    # send/write/drop/shoot (a) message/note/text to [recipient] "text"
+    re.compile(r"^(?:send|write|drop|shoot)\s+(?:an?\s+)?(?:msg|message|note|text)\s+to\s+" + REC_LAZY + r"\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # send/write/drop/shoot [recipient] (a) message/note/text DELIM [text]
+    re.compile(r"^(?:send|write|drop|shoot)\s+" + REC_LAZY + r"\s+(?:an?\s+)?(?:msg|message|note|text)" + DELIM + r"\s*(?P<text>.+)$", re.IGNORECASE),
+    # send/write/drop/shoot [recipient] (a) message/note/text "text"
+    re.compile(r"^(?:send|write|drop|shoot)\s+" + REC_LAZY + r"\s+(?:an?\s+)?(?:msg|message|note|text)\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # message/text/msg/ping/notify (to) [recipient] DELIM [text]
+    re.compile(r"^(?:message|text|msg|ping|notify)\s+(?:to\s+)?" + REC_LAZY + DELIM + r"\s*(?P<text>.+)$", re.IGNORECASE),
+    # message/text/msg/ping/notify (to) [recipient] "text"
+    re.compile(r"^(?:message|text|msg|ping|notify)\s+(?:to\s+)?" + REC_LAZY + r"\s+[\"'](?P<text>.+?)[\"'](?:\s+.*)?$", re.IGNORECASE),
+    # tell [recipient] DELIM or 'to' [text] (excluding email phrases)
+    re.compile(r"^tell\s+" + REC_LAZY + r"(?:\s+(?:saying|said\s+that|that|for|about|to)\s*|\s*[:,-]\s*)\s*(?P<text>.+)$", re.IGNORECASE),
+    # send/write/drop/shoot (a) message/note/text to [recipient] [text] (no delimiter)
+    re.compile(r"^(?:send|write|drop|shoot)\s+(?:an?\s+)?(?:msg|message|note|text)\s+to\s+" + REC_1_2 + r"\s+(?P<text>.+)$", re.IGNORECASE),
+    # send/write/drop/shoot [recipient] (a) message/note/text [text] (no delimiter)
+    re.compile(r"^(?:send|write|drop|shoot)\s+" + REC_1_2 + r"\s+(?:an?\s+)?(?:msg|message|note|text)\s+(?P<text>.+)$", re.IGNORECASE),
+    # message/text/msg/ping/notify [recipient] [text] (no delimiter)
+    re.compile(r"^(?:message|text|msg|ping|notify)\s+(?:to\s+)?" + REC_1_2 + r"\s+(?P<text>.+)$", re.IGNORECASE),
+    # tell [recipient] [text] (no delimiter)
+    re.compile(r"^tell\s+" + REC_1_2 + r"\s+(?P<text>.+)$", re.IGNORECASE),
+    # say/send a hi/hello to [recipient]
+    re.compile(r"^(?:send|say)\s+(?:a\s+)?(?P<text>hi|hello|hey|greetings?|update)\s+to\s+" + REC_LAZY + r"$", re.IGNORECASE),
+    # send [recipient] a hi/hello
+    re.compile(r"^send\s+" + REC_1_2 + r"\s+(?:a\s+)?(?P<text>hi|hello|hey|greetings?)$", re.IGNORECASE),
 ]
 
 GENERIC_MSG_PATTERNS = [
@@ -101,10 +114,10 @@ GENERIC_MSG_PATTERNS = [
 ]
 
 RECIPIENT_ONLY_PATTERNS = [
-    re.compile(r"^send\s+(?:a\s+)?(?:msg|message|note|text)\s+to\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
-    re.compile(r"^send\s+(?P<recipient>[\w\s\.-]+?)\s+(?:a\s+)?(?:msg|message|note|text)$", re.IGNORECASE),
-    re.compile(r"^(?:message|text)\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
-    re.compile(r"^tell\s+(?P<recipient>[\w\s\.-]+?)$", re.IGNORECASE),
+    re.compile(r"^(?:send|write|drop|shoot)\s+(?:an?\s+)?(?:msg|message|note|text)\s+to\s+" + REC_1_2 + r"$", re.IGNORECASE),
+    re.compile(r"^(?:send|write|drop|shoot)\s+" + REC_1_2 + r"\s+(?:an?\s+)?(?:msg|message|note|text)$", re.IGNORECASE),
+    re.compile(r"^(?:message|text|msg|ping|notify)\s+(?:to\s+)?" + REC_1_2 + r"$", re.IGNORECASE),
+    re.compile(r"^tell\s+" + REC_1_2 + r"$", re.IGNORECASE),
 ]
 
 TRAILING_PHRASES = [
@@ -133,6 +146,13 @@ def _clean_extracted_text(text: str) -> str:
     cleaned = text.strip()
     for tp in TRAILING_PHRASES:
         cleaned = re.sub(tp, "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.strip("\"' ")
+    cleaned = re.sub(
+        r"^(?:tell\s+(?:him|her|them|everyone)\s+that\s+|tell\s+(?:him|her|them)\s+|saying\s+that\s+|saying\s+|that\s+|to\s+|:\s*|-\s*|,\s*)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE
+    ).strip()
     cleaned = cleaned.strip("\"' ")
     return cleaned
 
@@ -262,53 +282,78 @@ async def extract_voice_intent(prompt: str, history: List[Dict[str, str]]) -> Di
         if pat.search(clean_p):
             return {"intent": "CANCEL_EMAIL"}
 
-    # ── 3. Check EMAIL Intent Regex Patterns ──────────────────────────────────
-    for pat in EMAIL_FULL_PATTERNS:
-        match = pat.search(clean_p)
-        if match:
-            groups = match.groupdict()
-            rec = groups.get("recipient", "").strip()
-            body = _clean_extracted_text(groups.get("body", ""))
-            subject = groups.get("subject", None)
-            if rec and body:
-                return {
-                    "intent": "SEND_EMAIL",
-                    "recipient": rec,
-                    "subject": _infer_email_subject(body, subject),
-                    "body": body,
-                }
+    # Determine keyword priority
+    has_email_keyword = bool(re.search(r"\b(?:email|emails|mail|mails|gmail)\b", clean_p, re.IGNORECASE))
+    has_msg_keyword = bool(re.search(r"\b(?:msg|message|messages|note|text|texts|ping|notify|chat|telegram|say\s+hi|say\s+hello)\b", clean_p, re.IGNORECASE))
+    if not has_email_keyword and re.search(r"\btell\b", clean_p, re.IGNORECASE):
+        has_msg_keyword = True
 
-    for pat in GENERIC_EMAIL_PATTERNS:
-        if pat.search(clean_p):
-            return {"intent": "SEND_EMAIL", "recipient": None, "subject": None, "body": None}
+    # Helper for checking messaging patterns
+    def _check_messaging():
+        for pat in MSG_FULL_PATTERNS:
+            match = pat.search(clean_p)
+            if match:
+                rec = match.group("recipient").strip()
+                raw_text = match.group("text").strip()
+                cleaned_txt = _clean_extracted_text(raw_text)
+                if rec and cleaned_txt:
+                    return {"intent": "SEND_MESSAGE", "recipient": rec, "text": cleaned_txt}
 
-    for pat in EMAIL_RECIPIENT_ONLY_PATTERNS:
-        match = pat.search(clean_p)
-        if match:
-            rec = match.group("recipient").strip()
-            if rec:
-                return {"intent": "SEND_EMAIL", "recipient": rec, "subject": None, "body": None}
+        for pat in GENERIC_MSG_PATTERNS:
+            if pat.search(clean_p):
+                return {"intent": "SEND_MESSAGE", "recipient": None, "text": None}
 
-    # ── 4. Check MESSAGING Intent Regex Patterns ──────────────────────────────
-    for pat in MSG_FULL_PATTERNS:
-        match = pat.search(clean_p)
-        if match:
-            rec = match.group("recipient").strip()
-            raw_text = match.group("text").strip()
-            cleaned_txt = _clean_extracted_text(raw_text)
-            if rec and cleaned_txt:
-                return {"intent": "SEND_MESSAGE", "recipient": rec, "text": cleaned_txt}
+        for pat in RECIPIENT_ONLY_PATTERNS:
+            match = pat.search(clean_p)
+            if match:
+                rec = match.group("recipient").strip()
+                if rec:
+                    return {"intent": "SEND_MESSAGE", "recipient": rec, "text": None}
+        return None
 
-    for pat in GENERIC_MSG_PATTERNS:
-        if pat.search(clean_p):
-            return {"intent": "SEND_MESSAGE", "recipient": None, "text": None}
+    # Helper for checking email patterns
+    def _check_email():
+        for pat in EMAIL_FULL_PATTERNS:
+            match = pat.search(clean_p)
+            if match:
+                groups = match.groupdict()
+                rec = groups.get("recipient", "").strip()
+                body = _clean_extracted_text(groups.get("body", ""))
+                subject = groups.get("subject", None)
+                if rec and body:
+                    return {
+                        "intent": "SEND_EMAIL",
+                        "recipient": rec,
+                        "subject": _infer_email_subject(body, subject),
+                        "body": body,
+                    }
 
-    for pat in RECIPIENT_ONLY_PATTERNS:
-        match = pat.search(clean_p)
-        if match:
-            rec = match.group("recipient").strip()
-            if rec:
-                return {"intent": "SEND_MESSAGE", "recipient": rec, "text": None}
+        for pat in GENERIC_EMAIL_PATTERNS:
+            if pat.search(clean_p):
+                return {"intent": "SEND_EMAIL", "recipient": None, "subject": None, "body": None}
+
+        for pat in EMAIL_RECIPIENT_ONLY_PATTERNS:
+            match = pat.search(clean_p)
+            if match:
+                rec = match.group("recipient").strip()
+                if rec:
+                    return {"intent": "SEND_EMAIL", "recipient": rec, "subject": None, "body": None}
+        return None
+
+    if has_email_keyword and not has_msg_keyword:
+        em_res = _check_email()
+        if em_res:
+            return em_res
+        msg_res = _check_messaging()
+        if msg_res:
+            return msg_res
+    else:
+        msg_res = _check_messaging()
+        if msg_res:
+            return msg_res
+        em_res = _check_email()
+        if em_res:
+            return em_res
 
     # ── 4. Fallback LLM Semantic Extraction ───────────────────────────────────
     try:

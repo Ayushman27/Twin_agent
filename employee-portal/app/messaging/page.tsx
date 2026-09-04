@@ -286,17 +286,19 @@ export default function MessagingPage() {
   );
 
   const conversationMessages = messages.filter((m) => {
+    if (activePeer === "system") return m.to === "system" || m.from === "system";
+
     const fromVal = m.from?.toLowerCase();
     const toVal = m.to?.toLowerCase();
 
-    const isFromMe = myIdentifiers.has(m.from) || myIdentifiers.has(fromVal);
+    const isFromMe = m.isSelf || myIdentifiers.has(m.from) || myIdentifiers.has(fromVal);
     const isToMe = myIdentifiers.has(m.to) || myIdentifiers.has(toVal);
     const isFromPeer = peerIdentifiers.has(m.from) || peerIdentifiers.has(fromVal);
     const isToPeer = peerIdentifiers.has(m.to) || peerIdentifiers.has(toVal);
 
     if (isFromMe && isToPeer) return true;
     if (isFromPeer && (isToMe || m.to === "system")) return true;
-    if (activePeer === "system" && m.to === "system") return true;
+    if (isFromPeer || isToPeer) return true;
     return false;
   });
 

@@ -126,7 +126,7 @@ export function useMessaging({
             to: data.to,
             text: data.text,
             timestamp: data.timestamp,
-            isSelf: data.from === userId,
+            isSelf: data.from === userId || data.from === "VoiceAgent_User",
             delivered: data.delivered,
           };
           setMessages((prev) => {
@@ -180,17 +180,38 @@ export function useMessaging({
   // ── Send a message ───────────────────────────────────────────────────────
   const sendMessage = useCallback(
     (to: string, text: string): boolean => {
-      if (!text.trim() || !to) return false;
+      const cleanText = text.trim();
+      if (!cleanText || !to) return false;
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
         console.warn("[Messaging WS] Not connected");
         return false;
       }
+
+      // Optimistically add outgoing message to state for instantaneous feedback
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const optimisticMsg: ChatMessage = {
+        id: tempId,
+        from: userId,
+        from_name: displayName ?? userId,
+        to,
+        text: cleanText,
+        timestamp: new Date().toISOString(),
+        isSelf: true,
+        delivered: false,
+      };
+
+      setMessages((prev) => {
+        const exists = prev.some((m) => m.text === cleanText && m.to === to && Math.abs(new Date(m.timestamp).getTime() - Date.now()) < 1500);
+        if (exists) return prev;
+        return [...prev, optimisticMsg];
+      });
+
       wsRef.current.send(
-        JSON.stringify({ type: "message", to, text: text.trim() })
+        JSON.stringify({ type: "message", to, text: cleanText })
       );
       return true;
     },
-    []
+    [userId, displayName]
   );
 
   // ── Load history from REST API ───────────────────────────────────────────
@@ -203,7 +224,7 @@ export function useMessaging({
         const data = await res.json();
         const history: ChatMessage[] = (data.messages ?? []).map((m: any) => ({
           ...m,
-          isSelf: m.from === userId,
+          isSelf: m.from === userId || m.from === "VoiceAgent_User",
         }));
         setMessages(history);
       } catch (err) {

@@ -27,6 +27,8 @@ import {
   ChevronRight,
   Eye,
   Inbox,
+  Copy,
+  Check,
 } from "lucide-react";
 
 interface GmailStatus {
@@ -139,10 +141,67 @@ export default function IntegrationsPage() {
     }
   }, [isAuthenticated]);
 
+  // Telegram Integration State
+  const [telegramStatus, setTelegramStatus] = useState<{
+    connected: boolean;
+    username?: string | null;
+    chatId?: number | null;
+  }>({ connected: false });
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Fetch Telegram connection status
+  const fetchTelegramStatus = useCallback(async () => {
+    if (!isAuthenticated || !user?.id) return;
+    try {
+      const res = await apiClient.get<any>(`/messaging/contacts?user_id=${user.id}`);
+      const me = res?.contacts?.find((c: any) => c.user_id === user.id || c.email === user.email);
+      if (me) {
+        setTelegramStatus({
+          connected: Boolean(me.telegram_connected),
+          username: me.telegram_username,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch telegram connection status:", err);
+    }
+  }, [isAuthenticated, user?.id, user?.email]);
+
   useEffect(() => {
     fetchStatus();
     fetchEmailHistory();
-  }, [fetchStatus, fetchEmailHistory]);
+    fetchTelegramStatus();
+  }, [fetchStatus, fetchEmailHistory, fetchTelegramStatus]);
+
+  // Handle Send Telegram Test Notification
+  const handleSendTelegramTest = async () => {
+    if (!user?.id) return;
+    setIsTestingTelegram(true);
+    try {
+      const res = await apiClient.post<any>("/telegram/test-message", {
+        user_id: user.id,
+        text: `🚀 Hello ${user.name || "Employee"}! This is a real-time test notification from your Digital Twin (Echo). Your Telegram integration is active and working!`,
+      });
+      if (res?.success) {
+        setNotification({
+          type: "success",
+          message: "Test message sent to your Telegram successfully! Check your Telegram app.",
+        });
+      } else {
+        setNotification({
+          type: "error",
+          message: res?.error || "Could not send test message. Please link your Telegram account first.",
+        });
+      }
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.message || "Failed to trigger test message.",
+      });
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
 
   // Handle Connect Gmail click
   const handleConnectGmail = async () => {
@@ -423,34 +482,86 @@ export default function IntegrationsPage() {
               <div className="p-2.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400">
                 <Radio size={22} />
               </div>
-              <span className="font-label-caps text-[10px] px-2.5 py-0.5 rounded bg-[#00ff41]/15 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5 font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#00ff41] animate-pulse" />
-                ACTIVE
-              </span>
+              {telegramStatus.connected ? (
+                <span className="font-label-caps text-[10px] px-2.5 py-0.5 rounded bg-[#00ff41]/15 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00ff41] animate-pulse" />
+                  CONNECTED
+                </span>
+              ) : (
+                <span className="font-label-caps text-[10px] px-2.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  NOT LINKED
+                </span>
+              )}
             </div>
 
             <h3 className="font-headline-lg text-lg font-bold text-on-surface mb-1">
               Telegram Messenger
             </h3>
-            <p className="font-code-sm text-xs text-on-surface-variant leading-relaxed mb-4">
-              Real-time conversational bot sync with mobile and desktop Telegram clients.
+            <p className="font-code-sm text-xs text-on-surface-variant leading-relaxed mb-3">
+              Link your Telegram account to receive real-time notifications and send commands to your Digital Twin (Echo).
             </p>
 
-            <div className="p-3 rounded bg-surface-container-lowest border border-border-tech space-y-1 mb-4 text-xs font-code-sm">
+            <div className="p-3 rounded bg-surface-container-lowest border border-border-tech space-y-1.5 mb-3 text-xs font-code-sm">
               <div className="flex justify-between text-on-surface-variant">
                 <span>Bot:</span>
-                <span className="text-on-surface font-semibold">@Echo2627bot</span>
+                <a
+                  href={`https://t.me/Echo2627bot?start=${user?.id || ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary-container font-semibold hover:underline flex items-center gap-1"
+                >
+                  @Echo2627bot
+                  <ExternalLink size={11} />
+                </a>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Delivery:</span>
-                <span className="text-primary-container font-semibold">Polling &amp; WebSockets</span>
+                <span>Account Status:</span>
+                <span className={telegramStatus.connected ? "text-[#00ff41] font-semibold" : "text-amber-400 font-semibold"}>
+                  {telegramStatus.connected ? (telegramStatus.username ? `@${telegramStatus.username}` : "Linked ✅") : "Not Linked"}
+                </span>
+              </div>
+              <div className="flex justify-between text-on-surface-variant">
+                <span>Link Command:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`/start ${user?.email || user?.id || ""}`);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  className="text-on-surface hover:text-primary-container transition-colors flex items-center gap-1 font-mono text-[11px]"
+                  title="Click to copy command"
+                >
+                  <code>/start {user?.email || "email"}</code>
+                  {copiedLink ? <Check size={11} className="text-[#00ff41]" /> : <Copy size={11} />}
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-border-tech flex items-center justify-between text-xs font-code-sm text-on-surface-variant">
-            <span>Linked to Digital Twin Engine</span>
-            <span className="text-primary-container text-[11px] font-mono">Running</span>
+          <div className="pt-3 border-t border-border-tech flex flex-wrap items-center justify-between gap-2 text-xs font-code-sm">
+            <a
+              href={`https://t.me/Echo2627bot?start=${user?.id || ""}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-label-caps text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+            >
+              <ExternalLink size={13} />
+              {telegramStatus.connected ? "Open @Echo2627bot" : "Link on Telegram"}
+            </a>
+
+            {telegramStatus.connected && (
+              <button
+                type="button"
+                onClick={handleSendTelegramTest}
+                disabled={isTestingTelegram}
+                className="px-3 py-1.5 bg-surface-container-high hover:bg-surface-container-highest border border-border-tech text-on-surface rounded font-label-caps text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <Send size={12} className={isTestingTelegram ? "animate-pulse text-primary-container" : ""} />
+                {isTestingTelegram ? "Sending..." : "Test Message"}
+              </button>
+            )}
           </div>
         </div>
       </div>

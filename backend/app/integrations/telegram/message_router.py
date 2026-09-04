@@ -211,7 +211,12 @@ class TelegramMessageRouter:
         """
         clean = token.strip()
         if clean.startswith("uid:"):
-            return clean[4:].strip() or None
+            clean = clean[4:].strip()
+
+        if not clean:
+            return None
+
+        clean_hyphenated = clean.replace("_", "-")
 
         try:
             from app.db.postgres import get_neon_session_maker
@@ -219,18 +224,32 @@ class TelegramMessageRouter:
             from app.modules.auth.models import User
             from sqlalchemy import select, or_
 
-            neon_maker = get_neon_session_maker()
-            identity_session_factory = neon_maker if neon_maker is not None else AsyncSessionLocal
-
-            async with identity_session_factory() as s:
+            # Helper to search in a session
+            async def _find_uid(s):
                 stmt = select(User.id).where(
-                    or_(User.id == clean, User.email.ilike(clean), User.name.ilike(f"%{clean}%"))
+                    or_(
+                        User.id == clean,
+                        User.id == clean_hyphenated,
+                        User.email.ilike(clean),
+                        User.name.ilike(f"%{clean}%"),
+                    )
                 )
-                res = await s.execute(stmt)
-                uid = res.scalar_one_or_none()
+                r = await s.execute(stmt)
+                return r.scalar_one_or_none()
+
+            neon_maker = get_neon_session_maker()
+            if neon_maker is not None:
+                async with neon_maker() as s:
+                    uid = await _find_uid(s)
+                    if uid:
+                        return uid
+
+            async with AsyncSessionLocal() as s_local:
+                uid = await _find_uid(s_local)
                 if uid:
                     return uid
+
         except Exception as e:
             logger.warning("Error resolving Telegram link token: %s", e)
 
-        return clean if len(clean) > 3 else None
+        return clean if len(clean) >= 10 else None

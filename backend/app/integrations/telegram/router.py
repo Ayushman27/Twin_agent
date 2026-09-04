@@ -234,6 +234,110 @@ async def telegram_health() -> dict:
         }
 
 
+@router.post(
+    "/link-user",
+    summary="Manually Link User to Telegram",
+    description="Links a Twin Agent user to a Telegram chat ID or username.",
+)
+async def link_user_telegram(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user_id = payload.get("user_id")
+    chat_id = payload.get("chat_id")
+    username = payload.get("username")
+    first_name = payload.get("first_name")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+
+    try:
+        from app.integrations.telegram.identity_resolver import EmployeeIdentityResolver
+        from app.core.database import AsyncSessionLocal
+
+        # Normalize chat_id
+        c_id = None
+        if chat_id:
+            try:
+                c_id = int(chat_id)
+            except ValueError:
+                pass
+
+        async with AsyncSessionLocal() as session:
+            resolver = EmployeeIdentityResolver(session)
+            if c_id:
+                identity = await resolver.link(
+                    chat_id=c_id,
+                    user_id=user_id,
+                    username=username,
+                    first_name=first_name,
+                )
+                await session.commit()
+                return {
+                    "success": True,
+                    "message": f"Successfully linked user {user_id} to Telegram chat {c_id}",
+                    "chat_id": c_id,
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Valid numeric chat_id is required.",
+                }
+    except Exception as exc:
+        logger.exception("Error linking user to Telegram: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post(
+    "/test-message",
+    summary="Send Test Message via Telegram",
+    description="Sends a test message to a linked user's Telegram or a specific chat_id.",
+)
+async def send_test_telegram_message(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user_id = payload.get("user_id")
+    chat_id = payload.get("chat_id")
+    text = payload.get("text", "🔔 Test notification from your Digital Twin Platform (Echo).")
+
+    try:
+        from app.integrations.telegram.sender import TelegramSender
+        from app.integrations.telegram.identity_resolver import EmployeeIdentityResolver
+        from app.core.database import AsyncSessionLocal
+        from sqlalchemy import select
+        from app.integrations.telegram.models import TelegramIdentity
+
+        target_chat_id = None
+        if chat_id:
+            target_chat_id = int(chat_id)
+        elif user_id:
+            async with AsyncSessionLocal() as session:
+                stmt = select(TelegramIdentity).where(TelegramIdentity.user_id == user_id)
+                res = await session.execute(stmt)
+                tg = res.scalar_one_or_none()
+                if tg:
+                    target_chat_id = tg.telegram_chat_id
+
+        if not target_chat_id:
+            return {
+                "success": False,
+                "error": "No linked Telegram chat found for this user. Send /start to @Echo2627bot first.",
+            }
+
+        sender = TelegramSender()
+        res = await sender.send_message(chat_id=target_chat_id, text=text)
+        return {
+            "success": True,
+            "chat_id": target_chat_id,
+            "message_id": res.get("result", {}).get("message_id"),
+            "detail": "Test message delivered to Telegram.",
+        }
+    except Exception as exc:
+        logger.exception("Error sending test Telegram message: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
 # ── Background task helper ─────────────────────────────────────────────────────
 
 async def _process_update(update: TelegramUpdate, db: AsyncSession) -> None:
